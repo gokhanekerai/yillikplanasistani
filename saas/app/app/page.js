@@ -667,6 +667,7 @@ export default function AppPage() {
                     accept=".xlsx,.xls,.docx,.pdf" 
                     className="hidden" 
                     onChange={processFile}
+                    onClick={(e) => { e.target.value = null }}
                     disabled={status === 'processing'}
                   />
                   
