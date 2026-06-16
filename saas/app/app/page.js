@@ -136,135 +136,40 @@ export default function AppPage() {
           let extractedRows = [];
 
           if (fileName.endsWith('.docx')) {
-            // Mammoth ile Word -> HTML çevirisi ve tablo ayıklama
-            const result = await mammoth.convertToHtml({ arrayBuffer });
-            const html = result.value;
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const rows = doc.querySelectorAll('tr');
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            const rawText = result.value;
             
-            let mockWorksheet = {};
-            let mockRange = { s: { c: 0, r: 0 }, e: { c: 0, r: 0 } };
-            let extractedRows = [];
-            let maxC = 0;
-            
-            let grid = [];
-            let merges = [];
-
-            rows.forEach((tr, R) => {
-              const cells = tr.querySelectorAll('td, th');
-              let C = 0;
-              cells.forEach((cell) => {
-                 while (grid[R] && grid[R][C] !== undefined) C++;
-                 
-                 let colspan = parseInt(cell.getAttribute('colspan')) || 1;
-                 let rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
-                 let text = cell.innerHTML.replace(/<br\s*[\/]?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, "").trim();
-                 
-                 if (colspan > 1 || rowspan > 1) {
-                   merges.push({s: {r: R, c: C}, e: {r: R + rowspan - 1, c: C + colspan - 1}});
-                 }
-
-                 for(let r = 0; r < rowspan; r++) {
-                    for(let c = 0; c < colspan; c++) {
-                       if (!grid[R+r]) grid[R+r] = [];
-                       if (r === 0 && c === 0) {
-                          grid[R+r][C+c] = { v: text, t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} }, font: { name: "Times New Roman", sz: 12 }, alignment: { wrapText: true, vertical: "center" } } };
-                       } else {
-                          grid[R+r][C+c] = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} }, font: { name: "Times New Roman", sz: 12 }, alignment: { wrapText: true, vertical: "center" } }, merged: true };
-                       }
-                    }
-                 }
-                 C += colspan;
-              });
-              if (C - 1 > maxC) maxC = C - 1;
+            // Call Gemini API to extract data
+            setErrorMessage("Yapay zeka verileri analiz edip ayıklıyor (yaklaşık 5-10 saniye)...");
+            const aiResponse = await fetch("/api/process", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rawText: rawText }),
             });
             
-            // Grid'i dolaşarak mockWorksheet ve extractedRows'u oluştur
-            let headerEndRow = 3;
-            for (let R = 0; R < grid.length && R < 10; R++) {
-               if (!grid[R]) continue;
-               let rowStr = grid[R].map(c => c ? c.v : "").join(" ").toUpperCase();
-               if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
-                  headerEndRow = R;
-               }
+            if (!aiResponse.ok) {
+                const errData = await aiResponse.json();
+                throw new Error("Yapay zeka analiz hatası: " + (errData.error || aiResponse.statusText));
             }
-
-            let kazanimC = 3;
-            if (grid[headerEndRow]) {
-               for (let c = 0; c <= maxC; c++) {
-                  let cell = grid[headerEndRow][c];
-                  if (cell && cell.v && cell.v.toUpperCase().includes("KAZANIM")) {
-                     kazanimC = c;
-                     break;
-                  }
-               }
-            }
-
-            let maxHeaderRow = 0;
-            for (let R = 0; R < grid.length; R++) {
-               let rowGrid = grid[R];
-               if (!rowGrid) continue;
-               
-               let rowData = {};
-               let isHeader = false;
-               
-               for (let C = 0; C <= maxC; C++) {
-                  let cellObj = rowGrid[C];
-                  if (!cellObj) cellObj = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} }, font: { name: "Times New Roman", sz: 12 }, alignment: { wrapText: true, vertical: "center" } } };
-                  
-                  if (R <= headerEndRow) {
-                     mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})] = cellObj;
-                     isHeader = true;
-                     if(R>maxHeaderRow) maxHeaderRow = R;
-                  } else {
-                     if (!cellObj.merged) {
-                        rowData[C] = cellObj;
-                     }
-                  }
-               }
-               
-               if (!isHeader && Object.keys(rowData).length > 0) {
-                 let hasContent = false;
-                 for (let key in rowData) { if (rowData[key] && rowData[key].v && String(rowData[key].v).trim() !== "") hasContent = true; }
-                 if (hasContent) {
-                   let mappedObj = {};
-                   let shift = 4 - kazanimC;
-                   for (let C in rowData) {
-                      let originalC = parseInt(C);
-                      if (originalC >= kazanimC) {
-                         mappedObj[originalC + shift] = rowData[originalC];
-                      }
-                   }
-                   extractedRows.push(mappedObj);
-                 }
-               }
-            }
-
-            // Başlığı bul (headerEndRow'dan önceki metinleri birleştir)
-            let docTitle = "";
-            let titleLines = [];
-            for (let R = 0; R < headerEndRow; R++) {
-               if (!grid[R]) continue;
-               let rowTexts = [];
-               for(let c=0; c<=maxC; c++) {
-                 if (grid[R][c] && !grid[R][c].merged && grid[R][c].v && grid[R][c].v.trim() !== "") {
-                   rowTexts.push(grid[R][c].v.trim());
-                 }
-               }
-               if (rowTexts.length > 0) {
-                 titleLines.push(rowTexts.join(" "));
-               }
-            }
-            if (titleLines.length > 0) {
-               docTitle = titleLines.join("\n");
-               docTitle = docTitle.replace(/202[2345]\D{0,5}202[3456]/g, "2026-2027");
-            }
-
-            mockWorksheet['!merges'] = merges;
-            mockRange.e.c = maxC;
-            mockRange.e.r = grid.length > 0 ? grid.length - 1 : 0;
             
+            const aiData = await aiResponse.json();
+            if (!aiData.data || aiData.data.length === 0) {
+                throw new Error("Yapay zeka plandan veri çıkaramadı.");
+            }
+            
+            const parsedData = aiData.data;
+            const docTitle = planTitle || "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+            
+            extractedRows = parsedData.map(item => {
+               return {
+                  4: { v: item.kazanimlar || "", t: 's' },
+                  5: { v: item.konular || "", t: 's' },
+                  6: { v: item.yontem || "", t: 's' },
+                  7: { v: item.materyaller || "", t: 's' },
+                  8: { v: item.aciklama || "", t: 's' }
+               };
+            });
+
             generateExcelFromContent(extractedRows, true, null, null, null, docTitle);
             return;
           } else if (fileName.endsWith('.pdf')) {
