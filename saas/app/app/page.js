@@ -233,24 +233,7 @@ export default function AppPage() {
             mockRange.e.c = maxC;
             mockRange.e.r = grid.length > 0 ? grid.length - 1 : 0;
             
-            // Dinamik Sütun Algılama
-            let colMap = { ay: -1, tarih: -1, saat: -1 };
-            for (let R = 0; R <= Math.min(5, mockRange.e.r); ++R) {
-              for (let C = 0; C <= mockRange.e.c; ++C) {
-                let cell = mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
-                if (cell && cell.v) {
-                  const text = cell.v.toUpperCase();
-                  if ((text === "AY" || text === "AYLAR" || text.includes(" AY ") || text.startsWith("AY ") || text.endsWith(" AY")) && !text.includes("DETAY") && !text.includes("KAYNAK")) colMap.ay = C;
-                  if (text.includes("TARİH") || text.includes("HAFTA")) colMap.tarih = C;
-                  if (text.includes("SAAT") || text.includes("SÜRE")) colMap.saat = C;
-                }
-              }
-            }
-            if (colMap.ay === -1) colMap.ay = 1;
-            if (colMap.tarih === -1) colMap.tarih = 2;
-            if (colMap.saat === -1) colMap.saat = 3;
-
-            generateExcelFromContent(extractedRows, false, mockWorksheet, mockRange, colMap);
+            generateExcelFromContent(extractedRows, true);
             return;
           } else if (fileName.endsWith('.pdf')) {
             // PDF.js ile PDF'ten metin çıkarma
