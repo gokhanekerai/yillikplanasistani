@@ -217,11 +217,23 @@ export default function AppPage() {
           const range = XLSX.utils.decode_range(worksheet['!ref']);
           let contentRows = [];
           
+          let colMap = { ay: -1, tarih: -1, saat: -1 };
+          for (let R = 0; R <= Math.min(5, range.e.r); ++R) {
+            for (let C = 0; C <= range.e.c; ++C) {
+              let cell = worksheet[XLSX.utils.encode_cell({c: C, r: R})];
+              if (cell && cell.v && typeof cell.v === 'string') {
+                const text = cell.v.toUpperCase();
+                if (text.includes("AY") && !text.includes("DETAY") && !text.includes("KAYNAK")) colMap.ay = C;
+                if (text.includes("TARİH") || text.includes("HAFTA")) colMap.tarih = C;
+                if (text.includes("SAAT") || text.includes("SÜRE")) colMap.saat = C;
+              }
+            }
+          }
+          if (colMap.ay === -1) colMap.ay = 1;
+          if (colMap.tarih === -1) colMap.tarih = 2;
+          if (colMap.saat === -1) colMap.saat = 3;
+          
           for (let R = 3; R <= range.e.r; ++R) { 
-            let weekCellAddr = {c: 2, r: R}; 
-            let weekCell = worksheet[XLSX.utils.encode_cell(weekCellAddr)];
-            let val = weekCell ? weekCell.v : undefined;
-            
             let isTatil = false;
             for(let c = 0; c <= range.e.c; c++) {
               let cell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
@@ -243,9 +255,15 @@ export default function AppPage() {
             }
             if (isFooter) continue; 
 
-            let eCell = worksheet[XLSX.utils.encode_cell({c: 4, r: R})]; 
-            let fCell = worksheet[XLSX.utils.encode_cell({c: 5, r: R})]; 
-            if (eCell && eCell.v || fCell && fCell.v) {
+            let hasContent = false;
+            for(let c = 0; c <= range.e.c; c++) {
+               if (c !== colMap.ay && c !== colMap.tarih && c !== colMap.saat && c !== 0) {
+                   let cell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
+                   if (cell && cell.v) hasContent = true;
+               }
+            }
+            
+            if (hasContent) {
               let rowData = {};
               for(let c = 0; c <= range.e.c; c++) {
                 let oldCell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
@@ -255,7 +273,7 @@ export default function AppPage() {
             }
           }
 
-          generateExcelFromContent(contentRows, false, worksheet, range);
+          generateExcelFromContent(contentRows, false, worksheet, range, colMap);
 
         } catch (err) {
           console.error(err);
@@ -270,7 +288,7 @@ export default function AppPage() {
     }
   };
 
-  const generateExcelFromContent = (contentRows, isFromPdf, oldWorksheet = null, oldRange = null) => {
+  const generateExcelFromContent = (contentRows, isFromPdf, oldWorksheet = null, oldRange = null, colMap = {ay: 1, tarih: 2, saat: 3}) => {
     try {
       const newWeeks = generateSchoolCalendar();
       const newWs = {};
@@ -302,7 +320,7 @@ export default function AppPage() {
               if(typeof newV === 'string' && newV.includes("EĞİTİM ÖĞRETİM YILI")) {
                 newV = "2026 - 2027 EĞİTİM ÖĞRETİM YILI";
               }
-              newWs[XLSX.utils.encode_cell({c: C, r: R})] = { v: newV, s: oldCell.s, t: oldCell.t };
+              newWs[XLSX.utils.encode_cell({c: C, r: R})] = { v: newV, s: oldCell.s ? { ...oldCell.s } : {}, t: oldCell.t };
             }
           }
         }
@@ -315,6 +333,13 @@ export default function AppPage() {
 
       let currentRowIdx = 4; 
       let contentIdx = 0;
+      
+      const borderStyle = {
+        top: { style: "thin", color: { auto: 1 } },
+        bottom: { style: "thin", color: { auto: 1 } },
+        left: { style: "thin", color: { auto: 1 } },
+        right: { style: "thin", color: { auto: 1 } }
+      };
 
       for (let i = 0; i < newWeeks.length; i++) {
         const week = newWeeks[i];
@@ -334,7 +359,7 @@ export default function AppPage() {
           const hNames = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))].join(" / ");
           for (let c = 0; c <= maxCols; ++c) {
             let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
-            let style = { fill: { fgColor: { rgb: "FFFF6B6B" } }, font: { bold: true, color: { rgb: "FFFFFFFF" } }, alignment: { horizontal: "center", vertical: "center" } };
+            let style = { fill: { fgColor: { rgb: "FFFF6B6B" } }, font: { bold: true, color: { rgb: "FFFFFFFF" } }, alignment: { horizontal: "center", vertical: "center" }, border: borderStyle };
             if (c === 1) newWs[cellAddr] = { v: hNames, t: 's', s: style }; 
             else newWs[cellAddr] = { v: "", t: 's', s: style };
           }
@@ -353,18 +378,20 @@ export default function AppPage() {
         for (let c = 0; c <= maxCols; ++c) {
           let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
           let cellObj = rowContent[c] ? { ...rowContent[c] } : { v: "", t: 's' };
+          
+          if (!cellObj.s) cellObj.s = {};
+          cellObj.s.border = borderStyle; // Her hücreye zorunlu border
 
-          if (c === 0) cellObj.v = (i + 1);
-          if (c === 1) cellObj.v = lastDay.monthStr;
-          if (c === 2) cellObj.v = dateText;
-          if (c === 3) cellObj.v = weekHours;
+          if (c === 0) cellObj.v = (i + 1); // Sıra
+          if (c === colMap.ay) cellObj.v = lastDay.monthStr;
+          if (c === colMap.tarih) cellObj.v = dateText;
+          if (c === colMap.saat) cellObj.v = weekHours;
 
-          if (c === 8) {
+          if (c === maxCols) { // Son sütuna her zaman not ekle
             const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))];
             if (holidays.length > 0) {
               let existing = cellObj.v || "";
               cellObj.v = existing + (existing ? "\n" : "") + "🎉 " + holidays.join(" / ");
-              if(!cellObj.s) cellObj.s = {};
               cellObj.s.fill = { fgColor: { rgb: "FFFFD93D" } };
               cellObj.s.font = { bold: true, color: { rgb: "FF333333" } };
             }
