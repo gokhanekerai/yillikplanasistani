@@ -152,33 +152,69 @@ export default function AppPage() {
             let mockRange = { s: { c: 0, r: 0 }, e: { c: 0, r: 0 } };
             let extractedRows = [];
             let maxC = 0;
+            
+            let grid = [];
+            let merges = [];
 
             rows.forEach((tr, R) => {
               const cells = tr.querySelectorAll('td, th');
-              if (cells.length - 1 > maxC) maxC = cells.length - 1;
-              let rowData = {};
-              
-              cells.forEach((cell, C) => {
-                 let text = cell.textContent.trim();
-                 let cellObj = { v: text, t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } } };
+              let C = 0;
+              cells.forEach((cell) => {
+                 while (grid[R] && grid[R][C] !== undefined) C++;
                  
-                 // İlk 4 satırı başlık (mockWorksheet) olarak kabul et
-                 if (R <= 3) {
-                    mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})] = cellObj;
-                 } else {
-                    rowData[C] = cellObj;
+                 let colspan = parseInt(cell.getAttribute('colspan')) || 1;
+                 let rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+                 let text = cell.textContent.trim();
+                 
+                 if (colspan > 1 || rowspan > 1) {
+                   merges.push({s: {r: R, c: C}, e: {r: R + rowspan - 1, c: C + colspan - 1}});
                  }
+
+                 for(let r = 0; r < rowspan; r++) {
+                    for(let c = 0; c < colspan; c++) {
+                       if (!grid[R+r]) grid[R+r] = [];
+                       if (r === 0 && c === 0) {
+                          grid[R+r][C+c] = { v: text, t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } } };
+                       } else {
+                          grid[R+r][C+c] = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } }, merged: true };
+                       }
+                    }
+                 }
+                 C += colspan;
               });
-              
-              if (R > 3 && Object.keys(rowData).length > 0) {
+              if (C - 1 > maxC) maxC = C - 1;
+            });
+            
+            // Grid'i dolaşarak mockWorksheet ve extractedRows'u oluştur
+            for (let R = 0; R < grid.length; R++) {
+               let rowGrid = grid[R] || [];
+               let rowData = {};
+               let isHeader = false;
+               
+               for (let C = 0; C <= maxC; C++) {
+                  let cellObj = rowGrid[C];
+                  if (!cellObj) cellObj = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } } };
+                  
+                  if (R <= 3 || (cellObj.v && cellObj.v.includes("EĞİTİM"))) {
+                     mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})] = cellObj;
+                     isHeader = true;
+                  } else {
+                     if (!cellObj.merged) {
+                       rowData[C] = cellObj;
+                     }
+                  }
+               }
+               
+               if (!isHeader && Object.keys(rowData).length > 0) {
                  let hasContent = false;
                  for (let k in rowData) { if (rowData[k].v) hasContent = true; }
                  if (hasContent) extractedRows.push(rowData);
-              }
-            });
+               }
+            }
 
+            mockWorksheet['!merges'] = merges;
             mockRange.e.c = maxC;
-            mockRange.e.r = rows.length > 0 ? rows.length - 1 : 0;
+            mockRange.e.r = grid.length > 0 ? grid.length - 1 : 0;
             
             // Dinamik Sütun Algılama
             let colMap = { ay: -1, tarih: -1, saat: -1 };
@@ -187,7 +223,7 @@ export default function AppPage() {
                 let cell = mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
                 if (cell && cell.v) {
                   const text = cell.v.toUpperCase();
-                  if (text.includes("AY") && !text.includes("DETAY") && !text.includes("KAYNAK")) colMap.ay = C;
+                  if ((text === "AY" || text === "AYLAR" || text.includes(" AY ") || text.startsWith("AY ") || text.endsWith(" AY")) && !text.includes("DETAY") && !text.includes("KAYNAK")) colMap.ay = C;
                   if (text.includes("TARİH") || text.includes("HAFTA")) colMap.tarih = C;
                   if (text.includes("SAAT") || text.includes("SÜRE")) colMap.saat = C;
                 }
@@ -418,7 +454,7 @@ export default function AppPage() {
           if (!cellObj.s) cellObj.s = {};
           cellObj.s.border = borderStyle; // Her hücreye zorunlu border
 
-          if (c === 0) cellObj.v = (i + 1); // Sıra
+          if (c === 0 && colMap.ay !== 0 && colMap.tarih !== 0 && colMap.saat !== 0) cellObj.v = (i + 1); // Sıra
           if (c === colMap.ay) cellObj.v = lastDay.monthStr;
           if (c === colMap.tarih) cellObj.v = dateText;
           if (c === colMap.saat) cellObj.v = weekHours;
