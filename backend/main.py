@@ -1,14 +1,16 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 import os
 import shutil
+from processor import process_plan_file
 
 app = FastAPI(title="Yıllık Plan Tatil İşaretleyici")
 
 # CORS policy for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,9 +42,14 @@ async def process_plan(plan_file: UploadFile = File(...), calendar_file: UploadF
         with open(calendar_path, "wb") as buffer:
             shutil.copyfileobj(calendar_file.file, buffer)
             
-    # TODO: Process the files and generate the output
+    # Dosyaları işle
+    output_path = process_plan_file(plan_path, calendar_path)
     
-    return {"message": "Dosyalar yüklendi ve işleniyor (Stub)", "plan": plan_file.filename}
+    return FileResponse(
+        path=output_path, 
+        filename=os.path.basename(output_path),
+        media_type="application/octet-stream"
+    )
 
 if __name__ == "__main__":
     import uvicorn

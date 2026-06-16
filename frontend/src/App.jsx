@@ -33,13 +33,45 @@ function App() {
   });
 
   const handleProcess = async () => {
-    if (!planFile || !calendarFile) return;
+    if (!planFile) return;
     setStatus('processing');
+    setErrorMessage('');
     
-    // Stub out API request for now
-    setTimeout(() => {
+    const formData = new FormData();
+    formData.append('plan_file', planFile);
+    if (calendarFile) {
+        formData.append('calendar_file', calendarFile);
+    }
+
+    try {
+        const response = await fetch('http://localhost:8000/api/process-plan', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error('Dosya işlenirken bir hata oluştu.');
+        }
+
+        const blob = await response.blob();
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const extension = planFile.name.split('.').pop();
+        link.download = `duzenlenmis_plan.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+
         setStatus('success');
-    }, 3000);
+    } catch (error) {
+        console.error(error);
+        setErrorMessage(error.message);
+        setStatus('error');
+    }
   };
 
   return (
@@ -164,10 +196,21 @@ function App() {
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <h4 className="text-xl font-bold text-green-900 mb-2">İşlem Tamamlandı!</h4>
-                <p className="text-green-700 mb-6">Yıllık planınıza tatil günleri başarıyla işlendi.</p>
-                <button className="bg-green-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-green-700 transition-colors shadow-sm">
-                  Düzenlenmiş Planı İndir (PDF)
-                </button>
+                <p className="text-green-700 mb-6">Yıllık planınıza tatil günleri başarıyla işlendi ve indirildi.</p>
+              </motion.div>
+            )}
+            {status === 'error' && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginTop: 32 }}
+                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center"
+              >
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h4 className="text-xl font-bold text-red-900 mb-2">Hata Oluştu</h4>
+                <p className="text-red-700">{errorMessage}</p>
               </motion.div>
             )}
           </AnimatePresence>
