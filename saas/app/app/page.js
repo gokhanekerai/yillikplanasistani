@@ -191,12 +191,23 @@ export default function AppPage() {
                }
             }
 
+            let kazanimC = 3;
+            if (grid[headerEndRow]) {
+               for (let c = 0; c <= maxC; c++) {
+                  let cell = grid[headerEndRow][c];
+                  if (cell && cell.v && cell.v.toUpperCase().includes("KAZANIM")) {
+                     kazanimC = c;
+                     break;
+                  }
+               }
+            }
+
             let maxHeaderRow = 0;
             for (let R = 0; R < grid.length; R++) {
                let rowGrid = grid[R];
                if (!rowGrid) continue;
                
-               let rowDataArray = [];
+               let rowData = {};
                let isHeader = false;
                
                for (let C = 0; C <= maxC; C++) {
@@ -209,20 +220,22 @@ export default function AppPage() {
                      if(R>maxHeaderRow) maxHeaderRow = R;
                   } else {
                      if (!cellObj.merged) {
-                       rowDataArray.push(cellObj);
+                        rowData[C] = cellObj;
                      }
                   }
                }
                
-               if (!isHeader && rowDataArray.length > 0) {
+               if (!isHeader && Object.keys(rowData).length > 0) {
                  let hasContent = false;
-                 for (let cell of rowDataArray) { if (cell && cell.v && String(cell.v).trim() !== "") hasContent = true; }
+                 for (let key in rowData) { if (rowData[key] && rowData[key].v && String(rowData[key].v).trim() !== "") hasContent = true; }
                  if (hasContent) {
                    let mappedObj = {};
-                   let targetC = 4;
-                   for (let k = 0; k < rowDataArray.length; k++) {
-                     mappedObj[targetC] = rowDataArray[k];
-                     targetC++;
+                   let shift = 4 - kazanimC;
+                   for (let C in rowData) {
+                      let originalC = parseInt(C);
+                      if (originalC >= kazanimC) {
+                         mappedObj[originalC + shift] = rowData[originalC];
+                      }
                    }
                    extractedRows.push(mappedObj);
                  }
