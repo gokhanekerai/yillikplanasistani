@@ -363,6 +363,12 @@ export default function AppPage() {
 
   const generateExcelFromContent = (contentRows, isFromPdf, oldWorksheet = null, oldRange = null, colMap = {ay: 1, tarih: 2, saat: 3}) => {
     try {
+      const replaceYears = (text) => {
+        if (typeof text !== 'string') return text;
+        return text.replace(/202[2345]\s*[-/]?\s*202[3456]/g, "2026-2027")
+                   .replace(/202[2345]\s+202[3456]/g, "2026 2027");
+      };
+
       const newWeeks = generateSchoolCalendar();
       const newWs = {};
       newWs['!merges'] = [];
@@ -398,13 +404,14 @@ export default function AppPage() {
         }
       } else {
         // Eski şablonu kopyala
+        let titleRow = -1;
         for (let R = 0; R <= 3; ++R) {
           for (let C = 0; C <= oldRange.e.c; ++C) {
             let oldCell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
             if (oldCell) {
-              let newV = oldCell.v;
-              if(typeof newV === 'string' && newV.includes("EĞİTİM ÖĞRETİM YILI")) {
-                newV = "2026 - 2027 EĞİTİM ÖĞRETİM YILI";
+              let newV = replaceYears(oldCell.v);
+              if (typeof newV === 'string' && newV.includes("2026-2027")) {
+                titleRow = R;
               }
               let newS = oldCell.s ? { ...oldCell.s } : {};
               if(!newS.font) newS.font = {};
@@ -416,9 +423,29 @@ export default function AppPage() {
             }
           }
         }
+        
         if(oldWorksheet['!merges']) {
           for(let m of oldWorksheet['!merges']) {
-            if(m.s.r <= 3) newWs['!merges'].push(m);
+            if(m.s.r <= 3 && m.s.r !== titleRow) newWs['!merges'].push(m);
+          }
+        }
+
+        if (titleRow !== -1) {
+          let titleCell = null;
+          for (let C = 0; C <= oldRange.e.c; ++C) {
+             let cellAddr = XLSX.utils.encode_cell({c: C, r: titleRow});
+             if (newWs[cellAddr] && typeof newWs[cellAddr].v === 'string' && newWs[cellAddr].v.includes("2026-2027")) {
+                titleCell = newWs[cellAddr];
+             }
+             delete newWs[cellAddr];
+          }
+          if (titleCell) {
+             titleCell.s.font.sz = 14;
+             titleCell.s.font.bold = true;
+             titleCell.s.alignment.horizontal = "center";
+             titleCell.s.alignment.vertical = "center";
+             newWs[XLSX.utils.encode_cell({c: 0, r: titleRow})] = titleCell;
+             newWs['!merges'].push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: maxCols } });
           }
         }
       }
@@ -470,6 +497,7 @@ export default function AppPage() {
         for (let c = 0; c <= maxCols; ++c) {
           let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
           let cellObj = rowContent[c] ? { ...rowContent[c] } : { v: "", t: 's' };
+          cellObj.v = replaceYears(cellObj.v);
           
           if (!cellObj.s) cellObj.s = {};
           cellObj.s.border = borderStyle; // Her hücreye zorunlu border
