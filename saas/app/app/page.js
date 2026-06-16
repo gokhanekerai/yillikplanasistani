@@ -193,58 +193,47 @@ export default function AppPage() {
                    if (!grid[R]) continue;
                    let rowStr = grid[R].map(c => c ? c.v : "").join(" ").toUpperCase();
                    if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
-                      headerEndRow = R;
-                   }
-                }
-
-                let kazanimC = 3;
-                if (grid[headerEndRow]) {
-                   for (let c = 0; c <= maxC; c++) {
-                      let cell = grid[headerEndRow][c];
-                      if (cell && cell.v && cell.v.toUpperCase().includes("KAZANIM")) {
-                         kazanimC = c;
-                         break;
-                      }
-                   }
-                }
-
-                for (let R = 0; R < grid.length; R++) {
-                   let rowGrid = grid[R];
-                   if (!rowGrid) continue;
-                   
-                   let rowData = {};
-                   let isHeader = false;
-                   
-                   for (let C = 0; C <= maxC; C++) {
-                      let cellObj = rowGrid[C];
-                      if (!cellObj) cellObj = { v: "", t: 's' };
-                      
-                      if (R <= headerEndRow) {
-                         isHeader = true;
-                      } else {
-                         if (!cellObj.merged) {
-                            rowData[C] = cellObj;
+                      let kazanimC = -1, konuC = -1, yontemC = -1, materyalC = -1, aciklamaC = -1;
+                      let headerRow = grid[R];
+                      for (let c = 0; c <= maxC; c++) {
+                         let cell = headerRow[c];
+                         if (cell && cell.v) {
+                            let text = cell.v.toUpperCase();
+                            if ((text.includes("KAZANIM") || text.includes("HEDEF") || text.includes("BECERİ")) && kazanimC === -1) kazanimC = c;
+                            else if (text.includes("KONU") && konuC === -1) konuC = c;
+                            else if ((text.includes("YÖNTEM") || text.includes("TEKNİK")) && yontemC === -1) yontemC = c;
+                            else if ((text.includes("MATERYAL") || text.includes("ARAÇ") || text.includes("GEREÇ") || text.includes("KAYNAK")) && materyalC === -1) materyalC = c;
+                            else if ((text.includes("AÇIKLAMA") || text.includes("DEĞERLENDİRME") || text.includes("ÖLÇME")) && aciklamaC === -1) aciklamaC = c;
                          }
                       }
-                   }
-                   
-                   if (!isHeader && Object.keys(rowData).length > 0) {
-                     let hasContent = false;
-                     for (let key in rowData) { if (rowData[key] && rowData[key].v && String(rowData[key].v).trim() !== "") hasContent = true; }
-                     if (hasContent) {
-                       let mappedObj = {};
-                       let shift = 4 - kazanimC;
-                       for (let C in rowData) {
-                          let originalC = parseInt(C);
-                          if (originalC >= kazanimC) {
-                             mappedObj[originalC + shift] = rowData[originalC];
-                          }
-                       }
-                       extractedRows.push(mappedObj);
-                     }
+                      const remainingC = [];
+                      for (let c = 0; c <= maxC; c++) {
+                         let text = (headerRow[c] && headerRow[c].v || "").toUpperCase();
+                         if (!text.includes("AY") && !text.includes("HAFTA") && !text.includes("TARİH") && !text.includes("SAAT") && !text.includes("SÜRE") && !text.includes("SIRA") && c !== kazanimC && c !== konuC && c !== yontemC && c !== materyalC && c !== aciklamaC) {
+                            remainingC.push(c);
+                         }
+                      }
+                      if (kazanimC === -1) kazanimC = remainingC.length > 0 ? remainingC.shift() : -1;
+                      if (konuC === -1) konuC = remainingC.length > 0 ? remainingC.shift() : -1;
+                      if (yontemC === -1) yontemC = remainingC.length > 0 ? remainingC.shift() : -1;
+                      if (materyalC === -1) materyalC = remainingC.length > 0 ? remainingC.shift() : -1;
+                      if (aciklamaC === -1) aciklamaC = remainingC.length > 0 ? remainingC.shift() : -1;
+                      for (let rIdx = R + 1; rIdx < grid.length; rIdx++) {
+                          let rowGrid = grid[rIdx];
+                          if (!rowGrid) continue;
+                          let rowData = {
+                             4: kazanimC !== -1 && rowGrid[kazanimC] ? { v: rowGrid[kazanimC].v, t: 's' } : { v: "", t: 's' },
+                             5: konuC !== -1 && rowGrid[konuC] ? { v: rowGrid[konuC].v, t: 's' } : { v: "", t: 's' },
+                             6: yontemC !== -1 && rowGrid[yontemC] ? { v: rowGrid[yontemC].v, t: 's' } : { v: "", t: 's' },
+                             7: materyalC !== -1 && rowGrid[materyalC] ? { v: rowGrid[materyalC].v, t: 's' } : { v: "", t: 's' },
+                             8: aciklamaC !== -1 && rowGrid[aciklamaC] ? { v: cleanAçıklamaText(rowGrid[aciklamaC].v), t: 's' } : { v: "", t: 's' }
+                          };
+                          let hasContent = false;
+                          for (let k in rowData) { if (rowData[k].v && String(rowData[k].v).trim() !== "") hasContent = true; }
+                          if (hasContent) extractedRows.push(rowData);
+                      }
                    }
                 }
-
                 if (extractedRows.length > 0) {
                   setProcessingStep("Excel şablonu oluşturuluyor...");
                   const docTitle = "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
@@ -390,23 +379,75 @@ export default function AppPage() {
           const range = XLSX.utils.decode_range(worksheet['!ref']);
           let contentRows = [];
           
-          let colMap = { ay: -1, tarih: -1, saat: -1 };
-          for (let R = 0; R <= Math.min(5, range.e.r); ++R) {
+          let colMap = {
+            ay: -1,
+            tarih: -1,
+            saat: -1,
+            kazanim: -1,
+            konu: -1,
+            yontem: -1,
+            materyal: -1,
+            aciklama: -1
+          };
+          
+          let headerRowIdx = -1;
+          for (let R = 0; R <= Math.min(10, range.e.r); ++R) {
+            let foundAny = false;
             for (let C = 0; C <= range.e.c; ++C) {
               let cell = worksheet[XLSX.utils.encode_cell({c: C, r: R})];
               if (cell && cell.v && typeof cell.v === 'string') {
                 const text = cell.v.toUpperCase();
-                if (text.includes("AY") && !text.includes("DETAY") && !text.includes("KAYNAK")) colMap.ay = C;
-                if (text.includes("TARİH") || text.includes("HAFTA")) colMap.tarih = C;
-                if (text.includes("SAAT") || text.includes("SÜRE")) colMap.saat = C;
+                if (text.includes("AY") && !text.includes("DETAY") && !text.includes("KAYNAK") && colMap.ay === -1) { colMap.ay = C; foundAny = true; }
+                if ((text.includes("TARİH") || text.includes("HAFTA")) && colMap.tarih === -1) { colMap.tarih = C; foundAny = true; }
+                if ((text.includes("SAAT") || text.includes("SÜRE")) && colMap.saat === -1) { colMap.saat = C; foundAny = true; }
+                if ((text.includes("KAZANIM") || text.includes("HEDEF") || text.includes("BECERİ")) && colMap.kazanim === -1) { colMap.kazanim = C; foundAny = true; }
+                if (text.includes("KONU") && colMap.konu === -1) { colMap.konu = C; foundAny = true; }
+                if ((text.includes("YÖNTEM") || text.includes("TEKNİK")) && colMap.yontem === -1) { colMap.yontem = C; foundAny = true; }
+                if ((text.includes("MATERYAL") || text.includes("ARAÇ") || text.includes("GEREÇ") || text.includes("KAYNAK")) && colMap.materyal === -1) { colMap.materyal = C; foundAny = true; }
+                if ((text.includes("AÇIKLAMA") || text.includes("DEĞERLENDİRME")) && colMap.aciklama === -1) { colMap.aciklama = C; foundAny = true; }
               }
             }
+            if (foundAny && headerRowIdx === -1) {
+              headerRowIdx = R;
+            }
           }
+          
           if (colMap.ay === -1) colMap.ay = 1;
           if (colMap.tarih === -1) colMap.tarih = 2;
           if (colMap.saat === -1) colMap.saat = 3;
           
-          for (let R = 3; R <= range.e.r; ++R) { 
+          const usedCols = new Set([colMap.ay, colMap.tarih, colMap.saat]);
+          const remainingCols = [];
+          for (let C = 0; C <= range.e.c; ++C) {
+            if (!usedCols.has(C)) {
+              let isSıra = false;
+              if (C === 0) {
+                let cell = worksheet[XLSX.utils.encode_cell({c: 0, r: headerRowIdx >= 0 ? headerRowIdx : 3})];
+                if (cell && cell.v && String(cell.v).toUpperCase().includes("SIRA")) {
+                  isSıra = true;
+                }
+              }
+              if (!isSıra) {
+                remainingCols.push(C);
+              }
+            }
+          }
+          
+          if (colMap.kazanim === -1) colMap.kazanim = remainingCols.length > 0 ? remainingCols.shift() : -1;
+          if (colMap.konu === -1) colMap.konu = remainingCols.length > 0 ? remainingCols.shift() : -1;
+          if (colMap.yontem === -1) colMap.yontem = remainingCols.length > 0 ? remainingCols.shift() : -1;
+          if (colMap.materyal === -1) colMap.materyal = remainingCols.length > 0 ? remainingCols.shift() : -1;
+          if (colMap.aciklama === -1) colMap.aciklama = remainingCols.length > 0 ? remainingCols.shift() : -1;
+
+          const getCellVal = (ws, r, c) => {
+            if (c === -1) return { v: "", t: 's' };
+            let cell = ws[XLSX.utils.encode_cell({c: c, r: r})];
+            return cell ? { v: cell.v, s: cell.s, t: cell.t } : { v: "", t: 's' };
+          };
+
+          const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 4;
+          
+          for (let R = startRow; R <= range.e.r; ++R) { 
             let isTatil = false;
             for(let c = 0; c <= range.e.c; c++) {
               let cell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
@@ -437,17 +478,19 @@ export default function AppPage() {
             }
             
             if (hasContent) {
-              let rowData = {};
-              for(let c = 0; c <= range.e.c; c++) {
-                let oldCell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
-                if(oldCell) rowData[c] = { v: oldCell.v, s: oldCell.s, t: oldCell.t };
-              }
+              let rowData = {
+                4: getCellVal(worksheet, R, colMap.kazanim),
+                5: getCellVal(worksheet, R, colMap.konu),
+                6: getCellVal(worksheet, R, colMap.yontem),
+                7: getCellVal(worksheet, R, colMap.materyal),
+                8: getCellVal(worksheet, R, colMap.aciklama)
+              };
               contentRows.push(rowData);
             }
           }
 
           setProcessingStep("Yeni şablon oluşturuluyor...");
-          generateExcelFromContent(contentRows, false, worksheet, range, colMap);
+          generateExcelFromContent(contentRows, false, worksheet, range, colMap, null, headerRowIdx);
 
         } catch (err) {
           console.error(err);
@@ -462,22 +505,133 @@ export default function AppPage() {
     }
   };
 
-  const generateExcelFromContent = (contentRows, isFromPdf = false, oldWorksheet = null, oldRange = null, colMap = null, customTitle = null) => {
+  const generateExcelFromContent = (contentRows, isFromPdf = false, oldWorksheet = null, oldRange = null, colMap = null, customTitle = null, headerRowIdx = -1) => {
     try {
-      if (!colMap) {
-        colMap = { ay: 1, tarih: 2, saat: 3 };
-      }
-
       const replaceYears = (text) => {
         if (typeof text !== 'string') return text;
         return text.replace(/202[2345]\D{0,5}202[3456]/g, "2026-2027");
+      };
+
+      const cleanAçıklamaText = (text) => {
+        if (typeof text !== 'string') return "";
+        
+        // Sınıf içi araç gereçlerin temizlenmesi
+        const materialsKeywords = [
+          "tahta kalemi", "silgi", "kitap", "ders kitabı", "defter", "bilgisayar", "projeksiyon", 
+          "akıllı tahta", "internet", "slayt", "sunu", "etkileşimli tahta", "pdf", "e-içerik", 
+          "eba", "ogm materyal", "kaynak", "materyal", "araç", "gereç", "video", "görsel",
+          "whiteboard", "marker", "eraser", "computer", "projector", "smart board", "presentation",
+          "kalem", "öğretmen kılavuzu", "kılavuz kitap", "hoparlör", "yazıcı", "tablet", "kâğıt",
+          "karton", "yapıştırıcı", "makas", "pano", "çalışma yaprağı", "fotokopi", "resim",
+          "fotoğraf", "afiş", "broşür", "etkinlik kağıdı"
+        ];
+        
+        const lines = text.split('\n');
+        const cleanedLines = lines.filter(line => {
+          const lowerLine = line.toLowerCase().trim();
+          if (lowerLine === "") return false;
+          
+          const containsMaterial = materialsKeywords.some(kw => lowerLine.includes(kw));
+          if (containsMaterial) {
+            // İstisnalar: Belirli gün ve haftalar, yazılı sınavlar, Atatürkçülük konuları vb.
+            const exceptions = [
+              "sınav", "yazılı", "bayram", "atatürk", "belirli", "hafta", "gün", 
+              "1. dönem", "2. dönem", "millî", "milli", "cumhuriyet", "kurtuluş", 
+              "kazanım", "konu", "gezi", "gözlem", "deney"
+            ];
+            const hasException = exceptions.some(exc => lowerLine.includes(exc));
+            if (hasException) {
+              return true;
+            }
+            return false; // Araç-gereç listesiyse temizle
+          }
+          return true;
+        });
+        
+        return cleanedLines.join('\n');
+      };
+
+      const getBelirliGunVeYazili = (week, activeWeekIdx) => {
+        const list = [];
+        
+        if (activeWeekIdx === 8) list.push("📝 1. DÖNEM 1. YAZILI SINAV HAFTASI");
+        if (activeWeekIdx === 17) list.push("📝 1. DÖNEM 2. YAZILI SINAV HAFTASI");
+        if (activeWeekIdx === 27) list.push("📝 2. DÖNEM 1. YAZILI SINAV HAFTASI");
+        if (activeWeekIdx === 35) list.push("📝 2. DÖNEM 2. YAZILI SINAV HAFTASI");
+
+        for (let day of week.days) {
+          const parts = day.dateStr.split('.'); 
+          const d = parseInt(parts[0]);
+          const m = parseInt(parts[1]);
+          
+          if (m === 9 && d >= 14 && d <= 18) {
+             if (!list.includes("📅 İlköğretim Haftası")) list.push("📅 İlköğretim Haftası");
+          }
+          if (m === 9 && d === 15) {
+             if (!list.includes("📅 15 Temmuz Demokrasi ve Milli Birlik Günü")) list.push("📅 15 Temmuz Demokrasi ve Milli Birlik Günü");
+          }
+          if (m === 10 && d === 4) {
+             if (!list.includes("📅 Hayvanları Koruma Günü")) list.push("📅 Hayvanları Koruma Günü");
+          }
+          if (m === 10 && d === 29) {
+             if (!list.includes("📅 29 Ekim Cumhuriyet Bayramı")) list.push("📅 29 Ekim Cumhuriyet Bayramı");
+          }
+          if ((m === 10 && d >= 29) || (m === 11 && d <= 4)) {
+             if (!list.includes("📅 Kızılay Haftası (29 Ekim - 4 Kasım)")) list.push("📅 Kızılay Haftası (29 Ekim - 4 Kasım)");
+          }
+          if (m === 11 && d >= 10 && d <= 16) {
+             if (!list.includes("📅 Atatürk Haftası (10-16 Kasım)")) list.push("📅 Atatürk Haftası (10-16 Kasım)");
+          }
+          if (m === 11 && d === 24) {
+             if (!list.includes("📅 24 Kasım Öğretmenler Günü")) list.push("📅 24 Kasım Öğretmenler Günü");
+          }
+          if (m === 12 && d >= 10 && d <= 16) {
+             if (!list.includes("📅 Demokrasi ve İnsan Hakları Haftası")) list.push("📅 Demokrasi ve İnsan Hakları Haftası");
+          }
+          if (m === 12 && d >= 12 && d <= 18) {
+             if (!list.includes("📅 Tutum, Yatırım ve Türk Malları (Yerli Malı) Haftası")) list.push("📅 Tutum, Yatırım ve Türk Malları (Yerli Malı) Haftası");
+          }
+          if (m === 1 && d === 1) {
+             if (!list.includes("📅 Yeni Yıl Yılbaşı Tatili")) list.push("📅 Yeni Yıl Yılbaşı Tatili");
+          }
+          if (m === 1 && d >= 8 && d <= 14) {
+             if (!list.includes("📅 Enerji Tasarrufu Haftası")) list.push("📅 Enerji Tasarrufu Haftası");
+          }
+          if (m === 3 && d >= 1 && d <= 7) {
+             if (!list.includes("📅 Yeşilay Haftası (1-7 Mart)")) list.push("📅 Yeşilay Haftası (1-7 Mart)");
+          }
+          if (m === 3 && d === 12) {
+             if (!list.includes("📅 İstiklal Marşı'nın Kabulü ve Mehmet Akif Ersoy'u Anma Günü")) list.push("📅 İstiklal Marşı'nın Kabulü ve Mehmet Akif Ersoy'u Anma Günü");
+          }
+          if (m === 3 && d === 18) {
+             if (!list.includes("📅 18 Mart Çanakkale Zaferi ve Şehitleri Anma Günü")) list.push("📅 18 Mart Çanakkale Zaferi ve Şehitleri Anma Günü");
+          }
+          if (m === 3 && d >= 22 && d <= 28) {
+             if (!list.includes("📅 Kütüphaneler Haftası")) list.push("📅 Kütüphaneler Haftası");
+          }
+          if (m === 4 && d === 23) {
+             if (!list.includes("📅 23 Nisan Ulusal Egemenlik ve Çocuk Bayramı")) list.push("📅 23 Nisan Ulusal Egemenlik ve Çocuk Bayramı");
+          }
+          if (m === 5 && d >= 1 && d <= 7) {
+             if (!list.includes("📅 Bilişim Haftası (Mayıs İlk Haftası)")) list.push("📅 Bilişim Haftası (Mayıs İlk Haftası)");
+             if (!list.includes("📅 Trafik ve İlk Yardım Haftası")) list.push("📅 Trafik ve İlk Yardım Haftası");
+          }
+          if (m === 5 && d === 19) {
+             if (!list.includes("📅 19 Mayıs Atatürk'ü Anma, Gençlik ve Spor Bayramı")) list.push("📅 19 Mayıs Atatürk'ü Anma, Gençlik ve Spor Bayramı");
+          }
+          if (m === 6 && d >= 1 && d <= 7) {
+             if (!list.includes("📅 Çevre Koruma Haftası")) list.push("📅 Çevre Koruma Haftası");
+          }
+        }
+        
+        return list.join("\n");
       };
 
       const newWeeks = generateSchoolCalendar();
       const newWs = {};
       newWs['!merges'] = [];
       
-      let maxCols = oldRange ? oldRange.e.c : 8; // A-I (8)
+      let maxCols = 8; // Her zaman A-I (9 sütun)
 
       // A4 Yatay (Landscape) için optimize edilmiş sütun genişlikleri (Kelimelerin bölünmemesi için)
       newWs['!cols'] = [
@@ -510,21 +664,11 @@ export default function AppPage() {
         }
       } else {
         // Dinamik Header tespiti
-        let headerEndRow = 3;
-        for (let R = 0; R <= 10 && R <= oldRange.e.r; ++R) {
-           let rowStr = "";
-           for (let C = 0; C <= oldRange.e.c; ++C) {
-              let cell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
-              if (cell && cell.v) rowStr += cell.v.toString().toUpperCase() + " ";
-           }
-           if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
-              headerEndRow = R;
-           }
-        }
+        let headerRowIdxToUse = headerRowIdx !== -1 ? headerRowIdx : 3;
 
-        // Eski şablonu kopyala
+        // Eski şablonun üst bilgilerini kopyala
         let titleRow = -1;
-        for (let R = 0; R <= headerEndRow; ++R) {
+        for (let R = 0; R < headerRowIdxToUse; ++R) {
           for (let C = 0; C <= oldRange.e.c; ++C) {
             let oldCell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
             if (oldCell) {
@@ -545,10 +689,20 @@ export default function AppPage() {
           }
         }
         
+        // Mergeleri kopyala (üst bilgiler için)
         if(oldWorksheet['!merges']) {
           for(let m of oldWorksheet['!merges']) {
-            if(m.s.r <= headerEndRow && m.s.r !== titleRow) newWs['!merges'].push(m);
+            if(m.s.r < headerRowIdxToUse && m.s.r !== titleRow) {
+              newWs['!merges'].push(m);
+            }
           }
+        }
+
+        // Başlık satırını yerleştir
+        const headerStyle = { font: { bold: true, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
+        const headers = ["SIRA", "AY", "HAFTA / TARİH", "SAAT", "KAZANIMLAR", "KONULAR", "YÖNTEM/TEKNİK", "MATERYALLER", "AÇIKLAMA"];
+        for(let c=0; c<=8; c++) {
+          newWs[XLSX.utils.encode_cell({c: c, r: headerRowIdxToUse})] = { v: headers[c], t: 's', s: headerStyle };
         }
 
         if (titleRow !== -1) {
@@ -571,13 +725,19 @@ export default function AppPage() {
              titleCell.s.alignment.horizontal = "center";
              titleCell.s.alignment.vertical = "center";
              newWs[XLSX.utils.encode_cell({c: 0, r: titleRow})] = titleCell;
-             newWs['!merges'].push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: maxCols } });
+             newWs['!merges'].push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 8 } });
           }
+        } else {
+          // Eğer başlık satırı bulunamadıysa en üste biz ekleyelim
+          let finalTitle = (planTitle && planTitle.trim()) || "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+          newWs['A1'] = { v: finalTitle, t: 's', s: { font: { bold: true, sz: 14, name: "Times New Roman" }, alignment: { horizontal: "center", vertical: "center", wrapText: true } } };
+          newWs['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
         }
       }
 
-      let currentRowIdx = 4; 
+      let currentRowIdx = isFromPdf || !oldWorksheet ? 4 : (headerRowIdx !== -1 ? headerRowIdx + 1 : 4); 
       let contentIdx = 0;
+      let activeWeekIndex = 0;
       
       const borderStyle = {
         top: { style: "thin", color: { auto: 1 } },
@@ -606,17 +766,19 @@ export default function AppPage() {
             let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
             let style = { fill: { fgColor: { rgb: "FFFF6B6B" } }, font: { bold: true, color: { rgb: "FFFFFFFF" }, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: borderStyle };
             let v = "";
-            if (c === colMap.ay) v = lastDay.monthStr;
-            if (c === colMap.tarih) v = dateText;
-            if (c === colMap.saat) v = "TATİL";
-            if (c === colMap.saat + 1) v = hNames;
+            if (c === 1) v = lastDay.monthStr;
+            if (c === 2) v = dateText;
+            if (c === 3) v = "TATİL";
+            if (c === 4) v = hNames;
             newWs[cellAddr] = { v: v, t: 's', s: style };
           }
           if (!newWs['!merges']) newWs['!merges'] = [];
-          newWs['!merges'].push({ s: { r: currentRowIdx, c: colMap.saat + 1 }, e: { r: currentRowIdx, c: maxCols } });
+          newWs['!merges'].push({ s: { r: currentRowIdx, c: 4 }, e: { r: currentRowIdx, c: maxCols } });
           currentRowIdx++;
           continue; 
         }
+
+        activeWeekIndex++;
 
         let rowContent = contentRows[contentIdx];
         if (!rowContent) {
@@ -627,7 +789,7 @@ export default function AppPage() {
 
         for (let c = 0; c <= maxCols; ++c) {
           let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
-          let cellObj = rowContent[c] ? { ...rowContent[c] } : { v: "", t: 's' };
+          let cellObj = (rowContent && rowContent[c]) ? { ...rowContent[c] } : { v: "", t: 's' };
           cellObj.v = replaceYears(cellObj.v);
           
           if (!cellObj.s) cellObj.s = {};
@@ -637,19 +799,28 @@ export default function AppPage() {
           cellObj.s.alignment.wrapText = true;
           cellObj.s.alignment.vertical = "center";
 
-          if (c === 0 && colMap.ay !== 0 && colMap.tarih !== 0 && colMap.saat !== 0) cellObj.v = (i + 1); // Sıra
-          if (c === colMap.ay) cellObj.v = lastDay.monthStr;
-          if (c === colMap.tarih) cellObj.v = dateText;
-          if (c === colMap.saat) cellObj.v = weekHours;
+          if (c === 0) cellObj.v = (i + 1); // Sıra
+          if (c === 1) cellObj.v = lastDay.monthStr;
+          if (c === 2) cellObj.v = dateText;
+          if (c === 3) cellObj.v = weekHours;
 
-          if (c === maxCols) { // Son sütuna her zaman not ekle
+          if (c === 8) { // Açıklama sütunu
+            let originalAçıklama = cellObj.v || "";
+            let cleanedOriginal = cleanAçıklamaText(originalAçıklama);
+            let autoNotes = getBelirliGunVeYazili(week, activeWeekIndex);
+            
+            let finalAçıklama = cleanedOriginal;
+            if (autoNotes) {
+              finalAçıklama = finalAçıklama ? (finalAçıklama + "\n" + autoNotes) : autoNotes;
+            }
+            
             const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))];
             if (holidays.length > 0) {
-              let existing = cellObj.v || "";
-              cellObj.v = existing + (existing ? "\n" : "") + "🎉 " + holidays.join(" / ");
+              finalAçıklama = finalAçıklama + (finalAçıklama ? "\n" : "") + "🎉 " + holidays.join(" / ");
               cellObj.s.fill = { fgColor: { rgb: "FFFFD93D" } };
               cellObj.s.font = { bold: true, color: { rgb: "FF333333" } };
             }
+            cellObj.v = finalAçıklama;
           }
           newWs[cellAddr] = cellObj;
         }
