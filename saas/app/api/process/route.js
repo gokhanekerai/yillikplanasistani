@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+export const maxDuration = 60; // Vercel timeout'unu 60 saniyeye çıkar (Hobby pro veya normal pro için)
+
 export async function POST(req) {
   try {
     const { rawText } = await req.json();
