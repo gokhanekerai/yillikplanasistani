@@ -4,6 +4,13 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft, Calendar, Upload, FileSpreadsheet, Download, Settings, ChevronRight, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
+import * as mammoth from "mammoth";
+import * as pdfjsLib from "pdfjs-dist/build/pdf";
+
+// PDF.js Worker Ayarı (CDN üzerinden)
+if (typeof window !== "undefined") {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 const TURKISH_MONTHS = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
 
@@ -109,6 +116,17 @@ export default function AppPage() {
     const file = e.target.files[0];
     if (!file) return;
 
+    const fileName = file.name.toLowerCase();
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const isWordOrPdf = fileName.endsWith('.docx') || fileName.endsWith('.pdf');
+
+    if (!isExcel && !isWordOrPdf) {
+      setErrorMessage("Lütfen sadece Excel (.xlsx, .xls), Word (.docx) veya PDF (.pdf) yükleyiniz.");
+      setStatus("error");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     const totalWeeklyHours = Object.values(schedule).reduce((a, b) => a + b, 0);
     if (totalWeeklyHours === 0) {
       setErrorMessage("Lütfen en az bir güne ders saati giriniz.");
@@ -121,28 +139,92 @@ export default function AppPage() {
     setErrorMessage("");
 
     try {
+      if (isWordOrPdf) {
+        setErrorMessage(fileName.endsWith('.docx') ? "Word dosyası analiz ediliyor..." : "PDF dosyası analiz ediliyor...");
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          let extractedRows = [];
+
+          if (fileName.endsWith('.docx')) {
+            // Mammoth ile Word -> HTML çevirisi ve tablo ayıklama
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            const html = result.value;
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const rows = doc.querySelectorAll('tr');
+            
+            rows.forEach(tr => {
+              const cells = tr.querySelectorAll('td');
+              // Genelde yıllık planlarda çok sütun olur. Basit bir sezgisel yaklaşımla en uzun metinleri kazanım ve konu sayıyoruz.
+              if (cells.length >= 3) {
+                let cellTexts = Array.from(cells).map(td => td.textContent.trim()).filter(text => text.length > 5);
+                if (cellTexts.length >= 2) {
+                  // Son iki uzun metni Konu ve Kazanım olarak kabul edelim (Kaba bir tahmin, Word tablosu standart değilse)
+                  extractedRows.push({
+                    4: { v: cellTexts[0] || "", t: 's' },
+                    5: { v: cellTexts[1] || "", t: 's' }
+                  });
+                }
+              }
+            });
+
+          } else if (fileName.endsWith('.pdf')) {
+            // PDF.js ile PDF'ten metin çıkarma
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdfDoc = await loadingTask.promise;
+            let fullText = "";
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+              const page = await pdfDoc.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(" ");
+              fullText += pageText + "\n";
+            }
+            
+            // PDF metni çok karmaşıktır, satırlara bölüp 20 karakterden uzunları kazanım/konu gibi alıyoruz
+            const lines = fullText.split('\n').filter(line => line.trim().length > 20);
+            lines.forEach(line => {
+              // Yıllık plan olduğu için imza vs dışındaki cümleleri alalım
+              const str = line.toUpperCase();
+              if(!str.includes("UYGUNDUR") && !str.includes("MÜDÜR") && !str.includes("ÖĞRETMEN") && !str.includes("EĞİTİM ÖĞRETİM")) {
+                extractedRows.push({
+                  4: { v: line.substring(0, Math.floor(line.length/2)).trim(), t: 's' },
+                  5: { v: line.substring(Math.floor(line.length/2)).trim(), t: 's' }
+                });
+              }
+            });
+          }
+
+          if (extractedRows.length === 0) {
+             // Eğer hiçbir şey bulamazsak boş bir şablon üretelim, kullanıcı elle doldurabilir.
+             extractedRows.push({ 4: {v: "Tablo okunamadı", t:'s'}, 5: {v: "Lütfen manuel giriniz", t:'s'} });
+          }
+
+          generateExcelFromContent(extractedRows, true); // true = sıfırdan şablon üret
+
+        } catch (err) {
+          setErrorMessage("Dosya analiz edilemedi: " + err.message);
+          setStatus("error");
+        }
+        return;
+      }
+
+      // --- KLASİK EXCEL İŞLEME SÜRECİ ---
       const reader = new FileReader();
       reader.onload = function(evt) {
         try {
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array', cellStyles: true });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
           
-          // 1. Yeni Takvimi Üret
-          const newWeeks = generateSchoolCalendar();
-          
-          // 2. Eski Excel satırlarını al (A-I sütunları 1'den başlar)
           const range = XLSX.utils.decode_range(worksheet['!ref']);
           let contentRows = [];
           
-          for (let R = 3; R <= range.e.r; ++R) { // Satır 4'ten başla (0-index = 3)
-            // C sütunu "Hafta" kontrolü
-            let weekCellAddr = {c: 2, r: R}; // C sütunu (0=A, 1=B, 2=C)
+          for (let R = 3; R <= range.e.r; ++R) { 
+            let weekCellAddr = {c: 2, r: R}; 
             let weekCell = worksheet[XLSX.utils.encode_cell(weekCellAddr)];
             let val = weekCell ? weekCell.v : undefined;
             
-            // Eğer "TATİL" içeriyorsa bu eski tatil satırıdır, atla.
             let isTatil = false;
             for(let c = 0; c <= range.e.c; c++) {
               let cell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
@@ -150,10 +232,8 @@ export default function AppPage() {
                 isTatil = true; break;
               }
             }
-            
             if (isTatil) continue;
             
-            // Eğer "Bu plan", "UYGUNDUR", "MÜDÜR" vs içeriyorsa imza satırıdır, sakla ama içerik değil
             let isFooter = false;
             for(let c = 0; c <= range.e.c; c++) {
               let cell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
@@ -164,13 +244,11 @@ export default function AppPage() {
                 }
               }
             }
-            if (isFooter) continue; // Şimdilik footer'ı atlıyoruz, en sona ekleyebiliriz.
+            if (isFooter) continue; 
 
-            // Eğer kazanım vs. varsa bu bir içerik satırıdır
-            let eCell = worksheet[XLSX.utils.encode_cell({c: 4, r: R})]; // E sütunu: Kazanım
-            let fCell = worksheet[XLSX.utils.encode_cell({c: 5, r: R})]; // F sütunu: Konu
+            let eCell = worksheet[XLSX.utils.encode_cell({c: 4, r: R})]; 
+            let fCell = worksheet[XLSX.utils.encode_cell({c: 5, r: R})]; 
             if (eCell && eCell.v || fCell && fCell.v) {
-              // Satır kopyasını al (stil ve veri)
               let rowData = {};
               for(let c = 0; c <= range.e.c; c++) {
                 let oldCell = worksheet[XLSX.utils.encode_cell({c: c, r: R})];
@@ -180,135 +258,147 @@ export default function AppPage() {
             }
           }
 
-          // 3. Yeni Excel Sayfasını Oluştur (Stilleri Koruyarak)
-          const newWs = {};
-          newWs['!merges'] = [];
-          newWs['!cols'] = worksheet['!cols'] || []; // Sütun genişlikleri
+          generateExcelFromContent(contentRows, false, worksheet, range);
 
-          // Başlık satırlarını kopyala (İlk 3 satır: 0,1,2)
-          for (let R = 0; R <= 3; ++R) {
-            for (let C = 0; C <= range.e.c; ++C) {
-              let oldCell = worksheet[XLSX.utils.encode_cell({c: C, r: R})];
-              if (oldCell) {
-                // Eğer başlık satırında 2023-2024 varsa değiştir
-                let newV = oldCell.v;
-                if(typeof newV === 'string' && newV.includes("EĞİTİM ÖĞRETİM YILI")) {
-                  newV = "2026 - 2027 EĞİTİM ÖĞRETİM YILI";
-                }
-                newWs[XLSX.utils.encode_cell({c: C, r: R})] = { v: newV, s: oldCell.s, t: oldCell.t };
-              }
-            }
-          }
-          // Merge'leri de kopyala (başlık için)
-          if(worksheet['!merges']) {
-            for(let m of worksheet['!merges']) {
-              if(m.s.r <= 3) newWs['!merges'].push(m);
-            }
-          }
-
-          let currentRowIdx = 4; // 5. satırdan başla (0-index)
-          let contentIdx = 0;
-
-          // Haftaları yazdır
-          for (let i = 0; i < newWeeks.length; i++) {
-            const week = newWeeks[i];
-            
-            // Hafta tarih metni
-            let firstDay = week.days[0];
-            let lastDay = week.days[week.days.length - 1];
-            let dateText = "";
-            if (firstDay.monthStr === lastDay.monthStr) {
-                dateText = `${firstDay.dateStr.split('.')[0]}-${lastDay.dateStr.split('.')[0]} ${firstDay.monthStr}`;
-            } else {
-                dateText = `${firstDay.dateStr.split('.')[0]} ${firstDay.monthStr} - ${lastDay.dateStr.split('.')[0]} ${lastDay.monthStr}`;
-            }
-
-            let weekHours = week.days.filter(d => !d.isHoliday).reduce((sum, d) => sum + d.hours, 0);
-            
-            // Tamamen tatil olan haftalar
-            if (!week.hasNormalClass) {
-              const hNames = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))].join(" / ");
-              
-              for (let c = 0; c <= range.e.c; ++c) {
-                let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
-                let style = { 
-                  fill: { fgColor: { rgb: "FFFF6B6B" } }, // Kırmızı arka plan
-                  font: { bold: true, color: { rgb: "FFFFFFFF" } },
-                  alignment: { horizontal: "center", vertical: "center" }
-                };
-                
-                if (c === 1) newWs[cellAddr] = { v: hNames, t: 's', s: style }; // B sütununa yaz
-                else newWs[cellAddr] = { v: "", t: 's', s: style };
-              }
-              // Merge tatil satırı
-              newWs['!merges'].push({ s: { r: currentRowIdx, c: 1 }, e: { r: currentRowIdx, c: range.e.c } });
-              currentRowIdx++;
-              continue; // Bu hafta için içerik yazma
-            }
-
-            // Normal hafta
-            let rowContent = contentRows[contentIdx];
-            if (!rowContent) {
-              // İçerik bitti, boş satır koy
-              rowContent = {};
-            } else {
-              contentIdx++;
-            }
-
-            for (let c = 0; c <= range.e.c; ++c) {
-              let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
-              let cellObj = rowContent[c] ? { ...rowContent[c] } : { v: "", t: 's' };
-
-              // A (0) Sıra
-              if (c === 0) cellObj.v = (i + 1);
-              // B (1) Ay
-              if (c === 1) cellObj.v = lastDay.monthStr;
-              // C (2) Hafta
-              if (c === 2) cellObj.v = dateText;
-              // D (3) Ders saati
-              if (c === 3) cellObj.v = weekHours;
-
-              // Eğer bu haftada kısmi tatil varsa, Açıklama (I = 8) kısmına ekle
-              if (c === 8) {
-                const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))];
-                if (holidays.length > 0) {
-                  let existing = cellObj.v || "";
-                  cellObj.v = existing + (existing ? "\n" : "") + "🎉 " + holidays.join(" / ");
-                  if(!cellObj.s) cellObj.s = {};
-                  cellObj.s.fill = { fgColor: { rgb: "FFFFD93D" } }; // Sarı
-                  cellObj.s.font = { bold: true, color: { rgb: "FF333333" } };
-                }
-              }
-              
-              newWs[cellAddr] = cellObj;
-            }
-            currentRowIdx++;
-          }
-
-          newWs['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: range.e.c, r: currentRowIdx } });
-
-          const newWb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(newWb, newWs, "Yıllık Plan");
-
-          const excelBuffer = XLSX.write(newWb, { bookType: 'xlsx', type: 'array' });
-          const blob = new Blob([excelBuffer], {type: "application/octet-stream"});
-          
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          let filenameParts = file.name.split(".");
-          filenameParts.pop();
-          link.download = `2026_2027_${filenameParts.join(".")}.xlsx`;
-          link.click();
-          window.URL.revokeObjectURL(url);
-          
-          setStatus("success");
         } catch (err) {
           console.error(err);
           setErrorMessage("Excel işlenirken bir hata oluştu: " + err.message);
           setStatus("error");
         }
       };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      setErrorMessage("Dosya okunamadı: " + err.message);
+      setStatus("error");
+    }
+  };
+
+  const generateExcelFromContent = (contentRows, isFromPdf, oldWorksheet = null, oldRange = null) => {
+    try {
+      const newWeeks = generateSchoolCalendar();
+      const newWs = {};
+      newWs['!merges'] = [];
+      
+      let maxCols = oldRange ? oldRange.e.c : 8; // A-I (8)
+
+      if (isFromPdf || !oldWorksheet) {
+        // Sıfırdan şablon oluştur
+        newWs['!cols'] = [{wch: 5}, {wch: 10}, {wch: 25}, {wch: 8}, {wch: 40}, {wch: 40}, {wch: 15}, {wch: 15}, {wch: 20}];
+        const headerStyle = { font: { bold: true }, alignment: { horizontal: "center", vertical: "center" }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
+        
+        // Üst Başlık
+        newWs['A1'] = { v: "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI", t: 's', s: { font: { bold: true, sz: 14 }, alignment: { horizontal: "center" } } };
+        newWs['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
+        
+        const headers = ["SIRA", "AY", "HAFTA / TARİH", "SAAT", "KAZANIMLAR", "KONULAR", "YÖNTEM/TEKNİK", "MATERYALLER", "AÇIKLAMA"];
+        for(let c=0; c<=8; c++) {
+          newWs[XLSX.utils.encode_cell({c: c, r: 3})] = { v: headers[c], t: 's', s: headerStyle };
+        }
+      } else {
+        // Eski şablonu kopyala
+        newWs['!cols'] = oldWorksheet['!cols'] || [];
+        for (let R = 0; R <= 3; ++R) {
+          for (let C = 0; C <= oldRange.e.c; ++C) {
+            let oldCell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
+            if (oldCell) {
+              let newV = oldCell.v;
+              if(typeof newV === 'string' && newV.includes("EĞİTİM ÖĞRETİM YILI")) {
+                newV = "2026 - 2027 EĞİTİM ÖĞRETİM YILI";
+              }
+              newWs[XLSX.utils.encode_cell({c: C, r: R})] = { v: newV, s: oldCell.s, t: oldCell.t };
+            }
+          }
+        }
+        if(oldWorksheet['!merges']) {
+          for(let m of oldWorksheet['!merges']) {
+            if(m.s.r <= 3) newWs['!merges'].push(m);
+          }
+        }
+      }
+
+      let currentRowIdx = 4; 
+      let contentIdx = 0;
+
+      for (let i = 0; i < newWeeks.length; i++) {
+        const week = newWeeks[i];
+        
+        let firstDay = week.days[0];
+        let lastDay = week.days[week.days.length - 1];
+        let dateText = "";
+        if (firstDay.monthStr === lastDay.monthStr) {
+            dateText = `${firstDay.dateStr.split('.')[0]}-${lastDay.dateStr.split('.')[0]} ${firstDay.monthStr}`;
+        } else {
+            dateText = `${firstDay.dateStr.split('.')[0]} ${firstDay.monthStr} - ${lastDay.dateStr.split('.')[0]} ${lastDay.monthStr}`;
+        }
+
+        let weekHours = week.days.filter(d => !d.isHoliday).reduce((sum, d) => sum + d.hours, 0);
+        
+        if (!week.hasNormalClass) {
+          const hNames = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))].join(" / ");
+          for (let c = 0; c <= maxCols; ++c) {
+            let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
+            let style = { fill: { fgColor: { rgb: "FFFF6B6B" } }, font: { bold: true, color: { rgb: "FFFFFFFF" } }, alignment: { horizontal: "center", vertical: "center" } };
+            if (c === 1) newWs[cellAddr] = { v: hNames, t: 's', s: style }; 
+            else newWs[cellAddr] = { v: "", t: 's', s: style };
+          }
+          newWs['!merges'].push({ s: { r: currentRowIdx, c: 1 }, e: { r: currentRowIdx, c: maxCols } });
+          currentRowIdx++;
+          continue; 
+        }
+
+        let rowContent = contentRows[contentIdx];
+        if (!rowContent) {
+          rowContent = {};
+        } else {
+          contentIdx++;
+        }
+
+        for (let c = 0; c <= maxCols; ++c) {
+          let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
+          let cellObj = rowContent[c] ? { ...rowContent[c] } : { v: "", t: 's' };
+
+          if (c === 0) cellObj.v = (i + 1);
+          if (c === 1) cellObj.v = lastDay.monthStr;
+          if (c === 2) cellObj.v = dateText;
+          if (c === 3) cellObj.v = weekHours;
+
+          if (c === 8) {
+            const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))];
+            if (holidays.length > 0) {
+              let existing = cellObj.v || "";
+              cellObj.v = existing + (existing ? "\n" : "") + "🎉 " + holidays.join(" / ");
+              if(!cellObj.s) cellObj.s = {};
+              cellObj.s.fill = { fgColor: { rgb: "FFFFD93D" } };
+              cellObj.s.font = { bold: true, color: { rgb: "FF333333" } };
+            }
+          }
+          newWs[cellAddr] = cellObj;
+        }
+        currentRowIdx++;
+      }
+
+      newWs['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: maxCols, r: currentRowIdx } });
+
+      const newWb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(newWb, newWs, "Yıllık Plan");
+
+      const excelBuffer = XLSX.write(newWb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([excelBuffer], {type: "application/octet-stream"});
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `2026_2027_Plan.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      
+      setStatus("success");
+    } catch (err) {
+      console.error(err);
+      setErrorMessage("Plan üretilirken bir hata oluştu: " + err.message);
+      setStatus("error");
+    }
+  };
       reader.readAsArrayBuffer(file);
     } catch (err) {
       setErrorMessage("Dosya okunamadı: " + err.message);
@@ -398,7 +488,7 @@ export default function AppPage() {
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs">2</span>
                     Eski Planı Yükle & Üret
                   </h2>
-                  <p className="text-sm text-slate-500 mt-1">Eski yıl planınızı seçtiğiniz an 2026-2027 planı üretilecektir.</p>
+                  <p className="text-sm text-slate-500 mt-1">Eski yıl planınızı seçtiğiniz an 2026-2027 planı üretilecektir. Excel, Word ve PDF desteklenir.</p>
                 </div>
                 <div className="hidden sm:block">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-semibold ring-1 ring-inset ring-green-600/20">
@@ -420,7 +510,7 @@ export default function AppPage() {
                     id="excelUpload" 
                     ref={fileInputRef}
                     type="file" 
-                    accept=".xlsx,.xls" 
+                    accept=".xlsx,.xls,.docx,.pdf" 
                     className="hidden" 
                     onChange={processFile}
                     disabled={status === 'processing'}
@@ -436,8 +526,8 @@ export default function AppPage() {
                       <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 mb-4 group-hover:scale-110 transition-transform group-hover:border-indigo-200 group-hover:bg-indigo-100">
                         <Upload className="w-6 h-6 text-slate-400 group-hover:text-indigo-600" />
                       </div>
-                      <p className="text-base font-semibold mb-1">Excel dosyasını seçmek için tıklayın</p>
-                      <p className="text-xs text-slate-400">Sadece .xlsx ve .xls dosyaları</p>
+                      <p className="text-base font-semibold mb-1">Eski planınızı seçmek için tıklayın</p>
+                      <p className="text-xs text-slate-400">.xlsx, .xls, .docx veya .pdf dosyaları</p>
                     </div>
                   )}
                 </label>
