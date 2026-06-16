@@ -241,11 +241,31 @@ export default function AppPage() {
                }
             }
 
+            // Başlığı bul (headerEndRow'dan önceki metinleri birleştir)
+            let docTitle = "";
+            let titleLines = [];
+            for (let R = 0; R < headerEndRow; R++) {
+               if (!grid[R]) continue;
+               let rowTexts = [];
+               for(let c=0; c<=maxC; c++) {
+                 if (grid[R][c] && !grid[R][c].merged && grid[R][c].v && grid[R][c].v.trim() !== "") {
+                   rowTexts.push(grid[R][c].v.trim());
+                 }
+               }
+               if (rowTexts.length > 0) {
+                 titleLines.push(rowTexts.join(" "));
+               }
+            }
+            if (titleLines.length > 0) {
+               docTitle = titleLines.join("\n");
+               docTitle = docTitle.replace(/202[2345]\D{0,5}202[3456]/g, "2026-2027");
+            }
+
             mockWorksheet['!merges'] = merges;
             mockRange.e.c = maxC;
             mockRange.e.r = grid.length > 0 ? grid.length - 1 : 0;
             
-            generateExcelFromContent(extractedRows, true);
+            generateExcelFromContent(extractedRows, true, null, null, null, docTitle);
             return;
           } else if (fileName.endsWith('.pdf')) {
             // PDF.js ile PDF'ten metin çıkarma
@@ -372,8 +392,12 @@ export default function AppPage() {
     }
   };
 
-  const generateExcelFromContent = (contentRows, isFromPdf, oldWorksheet = null, oldRange = null, colMap = {ay: 1, tarih: 2, saat: 3}) => {
+  const generateExcelFromContent = (contentRows, isFromPdf = false, oldWorksheet = null, oldRange = null, colMap = null, customTitle = null) => {
     try {
+      if (!colMap) {
+        colMap = { ay: 1, tarih: 2, saat: 3 };
+      }
+
       const replaceYears = (text) => {
         if (typeof text !== 'string') return text;
         return text.replace(/202[2345]\D{0,5}202[3456]/g, "2026-2027");
@@ -387,14 +411,15 @@ export default function AppPage() {
 
       // A4 Yatay (Landscape) için optimize edilmiş sütun genişlikleri (Kelimelerin bölünmemesi için)
       newWs['!cols'] = [
-        {wch: 8},   // A: Sıra / Ay
-        {wch: 15},  // B: Tarih / Hafta
-        {wch: 6},   // C: Saat
-        {wch: 40},  // D: Kazanımlar
-        {wch: 25},  // E: Konular
-        {wch: 15},  // F: Yöntem
-        {wch: 15},  // G: Materyal
-        {wch: 12}   // H: Açıklama
+        {wch: 5},   // A: Sıra 
+        {wch: 10},  // B: Ay
+        {wch: 15},  // C: Hafta/Tarih
+        {wch: 6},   // D: Saat
+        {wch: 45},  // E: Kazanımlar
+        {wch: 25},  // F: Konular
+        {wch: 15},  // G: Yöntem
+        {wch: 15},  // H: Materyal
+        {wch: 15}   // I: Açıklama
       ];
 
       if (isFromPdf || !oldWorksheet) {
@@ -402,8 +427,12 @@ export default function AppPage() {
         const headerStyle = { font: { bold: true, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
         
         // Üst Başlık
-        newWs['A1'] = { v: "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI", t: 's', s: { font: { bold: true, sz: 14 }, alignment: { horizontal: "center", vertical: "center" } } };
+        let finalTitle = customTitle || "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+        newWs['A1'] = { v: finalTitle, t: 's', s: { font: { bold: true, sz: 14, name: "Times New Roman" }, alignment: { horizontal: "center", vertical: "center", wrapText: true } } };
         newWs['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
+        let newLinesCount = (finalTitle.match(/\n/g) || []).length;
+        if (!newWs['!rows']) newWs['!rows'] = [];
+        newWs['!rows'][0] = { hpt: 30 + (newLinesCount * 15) };
         
         const headers = ["SIRA", "AY", "HAFTA / TARİH", "SAAT", "KAZANIMLAR", "KONULAR", "YÖNTEM/TEKNİK", "MATERYALLER", "AÇIKLAMA"];
         for(let c=0; c<=8; c++) {
@@ -502,11 +531,16 @@ export default function AppPage() {
           const hNames = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))].join(" / ");
           for (let c = 0; c <= maxCols; ++c) {
             let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
-            let style = { fill: { fgColor: { rgb: "FFFF6B6B" } }, font: { bold: true, color: { rgb: "FFFFFFFF" } }, alignment: { horizontal: "center", vertical: "center" }, border: borderStyle };
-            if (c === 1) newWs[cellAddr] = { v: hNames, t: 's', s: style }; 
-            else newWs[cellAddr] = { v: "", t: 's', s: style };
+            let style = { fill: { fgColor: { rgb: "FFFF6B6B" } }, font: { bold: true, color: { rgb: "FFFFFFFF" }, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: borderStyle };
+            let v = "";
+            if (c === colMap.ay) v = lastDay.monthStr;
+            if (c === colMap.tarih) v = dateText;
+            if (c === colMap.saat) v = "TATİL";
+            if (c === colMap.saat + 1) v = hNames;
+            newWs[cellAddr] = { v: v, t: 's', s: style };
           }
-          newWs['!merges'].push({ s: { r: currentRowIdx, c: 1 }, e: { r: currentRowIdx, c: maxCols } });
+          if (!newWs['!merges']) newWs['!merges'] = [];
+          newWs['!merges'].push({ s: { r: currentRowIdx, c: colMap.saat + 1 }, e: { r: currentRowIdx, c: maxCols } });
           currentRowIdx++;
           continue; 
         }
