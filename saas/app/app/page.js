@@ -10,6 +10,9 @@ const TURKISH_MONTHS = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
 
 export default function AppPage() {
   const [weeklyHours, setWeeklyHours] = useState("");
+  const [planTitle, setPlanTitle] = useState("");
+  const [teacherName, setTeacherName] = useState("");
+  const [principalName, setPrincipalName] = useState("");
   const [status, setStatus] = useState("idle"); // idle, processing, preview, success, error
   const [errorMessage, setErrorMessage] = useState("");
   const [processingStep, setProcessingStep] = useState("");
@@ -19,7 +22,7 @@ export default function AppPage() {
   // Sabit MEB 2026-2027 Takvimi
   const mebCalendar = {
     schoolStart: new Date(2026, 8, 14), // 14 Eylül 2026 (Aylar 0 indexli, 8=Eylül)
-    schoolEnd: new Date(2027, 5, 20),   // 20 Haziran 2027
+    schoolEnd: new Date(2027, 5, 25),   // 25 Haziran 2027 (MEB Takvimine göre Cuma günü son)
     holidays: [
       { name: "1. Dönem Ara Tatili", start: new Date(2026, 10, 16), end: new Date(2026, 10, 20) }, // 16-20 Kasım 2026
       { name: "Yarıyıl Tatili", start: new Date(2027, 0, 25), end: new Date(2027, 1, 5) }, // 25 Ocak - 5 Şubat 2027
@@ -33,12 +36,15 @@ export default function AppPage() {
     ]
   };
 
-
-
   const isDateHoliday = (dateObj) => {
-    const time = dateObj.getTime();
+    // Saat ve zaman dilimi farklarını sıfırlamak için sadece yıl-ay-gün üzerinden karşılaştırma yapıyoruz
+    const checkDateOnly = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    const checkTime = checkDateOnly.getTime();
+    
     for (let h of mebCalendar.holidays) {
-      if (time >= h.start.getTime() && time <= h.end.getTime()) {
+      const sDate = new Date(h.start.getFullYear(), h.start.getMonth(), h.start.getDate());
+      const eDate = new Date(h.end.getFullYear(), h.end.getMonth(), h.end.getDate());
+      if (checkTime >= sDate.getTime() && checkTime <= eDate.getTime()) {
         return h.name;
       }
     }
@@ -491,7 +497,7 @@ export default function AppPage() {
         const headerStyle = { font: { bold: true, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
         
         // Üst Başlık
-        let finalTitle = customTitle || "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+        let finalTitle = (planTitle && planTitle.trim()) || customTitle || "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
         newWs['A1'] = { v: finalTitle, t: 's', s: { font: { bold: true, sz: 14, name: "Times New Roman" }, alignment: { horizontal: "center", vertical: "center", wrapText: true } } };
         newWs['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
         let newLinesCount = (finalTitle.match(/\n/g) || []).length;
@@ -557,6 +563,9 @@ export default function AppPage() {
              delete newWs[cellAddr];
           }
           if (titleCell) {
+             if (planTitle && planTitle.trim()) {
+                titleCell.v = planTitle.trim();
+             }
              titleCell.s.font.sz = 14;
              titleCell.s.font.bold = true;
              titleCell.s.alignment.horizontal = "center";
@@ -647,6 +656,60 @@ export default function AppPage() {
         currentRowIdx++;
       }
 
+      // İmza ve Müdür Onay Bölümü
+      let footerRow = currentRowIdx + 2;
+      const teacherNameText = teacherName && teacherName.trim() ? teacherName.trim() : "";
+      const principalNameText = principalName && principalName.trim() ? principalName.trim() : "";
+
+      if (teacherNameText || principalNameText) {
+        // Sol Taraf: Zümre Öğretmenleri
+        if (teacherNameText) {
+          newWs[XLSX.utils.encode_cell({c: 4, r: footerRow})] = { 
+            v: teacherNameText, 
+            t: 's', 
+            s: { font: { name: "Times New Roman", sz: 12, bold: true }, alignment: { horizontal: "center", vertical: "center", wrapText: true } } 
+          };
+          newWs[XLSX.utils.encode_cell({c: 4, r: footerRow + 1})] = { 
+            v: "Zümre Öğretmeni", 
+            t: 's', 
+            s: { font: { name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center" } } 
+          };
+        }
+
+        // Sağ Taraf: Okul Müdürü Onayı
+        if (principalNameText) {
+          const currentDateStr = new Date().toLocaleDateString('tr-TR');
+          newWs[XLSX.utils.encode_cell({c: 7, r: footerRow})] = { 
+            v: currentDateStr, 
+            t: 's', 
+            s: { font: { name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center" } } 
+          };
+          newWs[XLSX.utils.encode_cell({c: 7, r: footerRow + 1})] = { 
+            v: "UYGUNDUR", 
+            t: 's', 
+            s: { font: { name: "Times New Roman", sz: 12, bold: true }, alignment: { horizontal: "center", vertical: "center" } } 
+          };
+          newWs[XLSX.utils.encode_cell({c: 7, r: footerRow + 2})] = { 
+            v: principalNameText, 
+            t: 's', 
+            s: { font: { name: "Times New Roman", sz: 12, bold: true }, alignment: { horizontal: "center", vertical: "center" } } 
+          };
+          newWs[XLSX.utils.encode_cell({c: 7, r: footerRow + 3})] = { 
+            v: "Okul Müdürü", 
+            t: 's', 
+            s: { font: { name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center" } } 
+          };
+        }
+
+        if (!newWs['!rows']) newWs['!rows'] = [];
+        newWs['!rows'][footerRow] = { hpt: 20 };
+        newWs['!rows'][footerRow + 1] = { hpt: 20 };
+        newWs['!rows'][footerRow + 2] = { hpt: 20 };
+        newWs['!rows'][footerRow + 3] = { hpt: 20 };
+
+        currentRowIdx = footerRow + 4;
+      }
+
       newWs['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: maxCols, r: currentRowIdx } });
 
       const newWb = XLSX.utils.book_new();
@@ -723,24 +786,62 @@ export default function AppPage() {
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs">1</span>
-                    Haftalık Ders Programı
+                    Plan Ayarları ve İmza Bilgileri
                   </h2>
-                  <p className="text-sm text-slate-500 mt-1">Dersinizin haftalık günlere dağılımını girin.</p>
+                  <p className="text-sm text-slate-500 mt-1">Haftalık ders saatini, plan başlığını ve onaylayacak kişileri girin.</p>
                 </div>
               </div>
               
-              <div className="p-6">
-                <div className="max-w-md mx-auto space-y-3">
-                  <label className="block text-sm font-medium text-slate-700">Haftalık Toplam Ders Saati</label>
-                  <input 
-                    type="number" 
-                    min="1" max="40"
-                    value={weeklyHours}
-                    onChange={(e) => setWeeklyHours(e.target.value)}
-                    placeholder="Örn: 3"
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-lg font-semibold shadow-sm"
-                  />
-                  <p className="text-xs text-slate-500">Bu dersin haftada toplam kaç saat işlendiğini girin.</p>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Haftalık Toplam Ders Saati</label>
+                    <input 
+                      type="number" 
+                      min="1" max="40"
+                      value={weeklyHours}
+                      onChange={(e) => setWeeklyHours(e.target.value)}
+                      placeholder="Örn: 3"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-base font-semibold shadow-sm"
+                    />
+                    <p className="text-xs text-slate-400">Bu dersin haftada toplam kaç saat işlendiğini girin.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Plan Başlığı (İsteğe Bağlı)</label>
+                    <input 
+                      type="text" 
+                      value={planTitle}
+                      onChange={(e) => setPlanTitle(e.target.value)}
+                      placeholder="Örn: BİLİŞİM TEKNOLOJİLERİ VE YAZILIM DERSİ YILLIK PLANI"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-base shadow-sm"
+                    />
+                    <p className="text-xs text-slate-400">Excel'in en üstünde yer alacak plan başlığı.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Zümre Öğretmen(ler)i Adı Soyadı</label>
+                    <input 
+                      type="text" 
+                      value={teacherName}
+                      onChange={(e) => setTeacherName(e.target.value)}
+                      placeholder="Örn: Ahmet Yılmaz, Ayşe Demir"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-base shadow-sm"
+                    />
+                    <p className="text-xs text-slate-400">Excel'in altındaki imza bölümüne yazılır.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Okul Müdürü Adı Soyadı</label>
+                    <input 
+                      type="text" 
+                      value={principalName}
+                      onChange={(e) => setPrincipalName(e.target.value)}
+                      placeholder="Örn: Mehmet Kaya"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-base shadow-sm"
+                    />
+                    <p className="text-xs text-slate-400">Müdür onay onay bölümüne yazılır.</p>
+                  </div>
                 </div>
               </div>
             </div>
