@@ -136,6 +136,121 @@ export default function AppPage() {
           let extractedRows = [];
 
           if (fileName.endsWith('.docx')) {
+            // 1. ÖNCELİKLİ YÖNTEM: Tarayıcı tarafında doğrudan tablo çözümleme (Son derece hızlı ve 100% tutarlı)
+            try {
+              setProcessingStep("Word belgesindeki tablolar çözümleniyor...");
+              const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+              const html = htmlResult.value;
+              
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, "text/html");
+              const rows = doc.querySelectorAll('tr');
+              
+              if (rows.length > 0) {
+                console.log("Word tablosu bulundu, tarayıcıda doğrudan ayıklanıyor...");
+                
+                let maxC = 0;
+                let grid = [];
+                let merges = [];
+
+                rows.forEach((tr, R) => {
+                  const cells = tr.querySelectorAll('td, th');
+                  let C = 0;
+                  cells.forEach((cell) => {
+                     while (grid[R] && grid[R][C] !== undefined) C++;
+                     
+                     let colspan = parseInt(cell.getAttribute('colspan')) || 1;
+                     let rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+                     let text = cell.innerHTML.replace(/<br\s*[\/]?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, "").trim();
+                     
+                     if (colspan > 1 || rowspan > 1) {
+                       merges.push({s: {r: R, c: C}, e: {r: R + rowspan - 1, c: C + colspan - 1}});
+                     }
+
+                     for(let r = 0; r < rowspan; r++) {
+                        for(let c = 0; c < colspan; c++) {
+                           if (!grid[R+r]) grid[R+r] = [];
+                           if (r === 0 && c === 0) {
+                              grid[R+r][C+c] = { v: text, t: 's' };
+                           } else {
+                              grid[R+r][C+c] = { v: "", t: 's', merged: true };
+                           }
+                        }
+                     }
+                     C += colspan;
+                  });
+                  if (C - 1 > maxC) maxC = C - 1;
+                });
+                
+                let headerEndRow = 3;
+                for (let R = 0; R < grid.length && R < 10; R++) {
+                   if (!grid[R]) continue;
+                   let rowStr = grid[R].map(c => c ? c.v : "").join(" ").toUpperCase();
+                   if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
+                      headerEndRow = R;
+                   }
+                }
+
+                let kazanimC = 3;
+                if (grid[headerEndRow]) {
+                   for (let c = 0; c <= maxC; c++) {
+                      let cell = grid[headerEndRow][c];
+                      if (cell && cell.v && cell.v.toUpperCase().includes("KAZANIM")) {
+                         kazanimC = c;
+                         break;
+                      }
+                   }
+                }
+
+                for (let R = 0; R < grid.length; R++) {
+                   let rowGrid = grid[R];
+                   if (!rowGrid) continue;
+                   
+                   let rowData = {};
+                   let isHeader = false;
+                   
+                   for (let C = 0; C <= maxC; C++) {
+                      let cellObj = rowGrid[C];
+                      if (!cellObj) cellObj = { v: "", t: 's' };
+                      
+                      if (R <= headerEndRow) {
+                         isHeader = true;
+                      } else {
+                         if (!cellObj.merged) {
+                            rowData[C] = cellObj;
+                         }
+                      }
+                   }
+                   
+                   if (!isHeader && Object.keys(rowData).length > 0) {
+                     let hasContent = false;
+                     for (let key in rowData) { if (rowData[key] && rowData[key].v && String(rowData[key].v).trim() !== "") hasContent = true; }
+                     if (hasContent) {
+                       let mappedObj = {};
+                       let shift = 4 - kazanimC;
+                       for (let C in rowData) {
+                          let originalC = parseInt(C);
+                          if (originalC >= kazanimC) {
+                             mappedObj[originalC + shift] = rowData[originalC];
+                          }
+                       }
+                       extractedRows.push(mappedObj);
+                     }
+                   }
+                }
+
+                if (extractedRows.length > 0) {
+                  setProcessingStep("Excel şablonu oluşturuluyor...");
+                  const docTitle = "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+                  generateExcelFromContent(extractedRows, true, null, null, null, docTitle);
+                  return;
+                }
+              }
+            } catch (parseErr) {
+              console.warn("Doğrudan tablo çözümleme başarısız oldu, yapay zekaya devrediliyor:", parseErr);
+            }
+
+            // 2. YEDEK YÖNTEM: Yapay zeka ile metin analizi (Tablo bulunamazsa veya hata alınırsa)
             setProcessingStep("Word belgesindeki metinler ayıklanıyor...");
             const result = await mammoth.extractRawText({ arrayBuffer });
             const rawText = result.value;
