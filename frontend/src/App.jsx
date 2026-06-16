@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 function App() {
   const [planFile, setPlanFile] = useState(null);
   const [selectedYear, setSelectedYear] = useState('2026-2027');
+  const [planTitle, setPlanTitle] = useState('');
   const [status, setStatus] = useState('idle'); // idle, uploading, processing, success, error
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -32,6 +33,9 @@ function App() {
     const formData = new FormData();
     formData.append('plan_file', planFile);
     formData.append('academic_year', selectedYear);
+    if (planTitle.trim()) {
+        formData.append('plan_title', planTitle.trim());
+    }
 
     try {
         const response = await fetch('http://localhost:8000/api/process-plan', {
@@ -119,27 +123,44 @@ function App() {
               </div>
             </div>
 
-            {/* Year Selection */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-slate-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-brand-500" />
-                2. Eğitim Öğretim Yılı
-              </h3>
-              <div className="h-64 flex flex-col justify-center p-8 bg-slate-50 rounded-2xl border-2 border-slate-100">
-                <label className="block text-sm font-medium text-slate-700 mb-3 text-center">
-                  Hangi yıla ait tatiller eklenecek?
-                </label>
-                <select 
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className="mt-1 block w-full pl-3 pr-10 py-3 text-base border-slate-300 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm rounded-xl border bg-white shadow-sm"
-                >
-                  <option value="2026-2027">2026 - 2027 Eğitim Öğretim Yılı</option>
-                  <option value="2027-2028" disabled>2027 - 2028 (Yakında)</option>
-                </select>
-                <p className="mt-4 text-sm text-slate-500 text-center">
-                  MEB 2026-2027 çalışma takvimi resmi tatilleri veritabanında hazırdır.
-                </p>
+            {/* Options Column */}
+            <div className="space-y-6 flex flex-col justify-between">
+              {/* Year Selection */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-slate-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-brand-500" />
+                  2. Eğitim Öğretim Yılı
+                </h3>
+                <div className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                  <select 
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                    className="block w-full pl-3 pr-10 py-3 text-base border-slate-300 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm rounded-xl border bg-white shadow-sm"
+                  >
+                    <option value="2026-2027">2026 - 2027 Eğitim Öğretim Yılı</option>
+                    <option value="2027-2028" disabled>2027 - 2028 (Yakında)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Title Input */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-slate-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-brand-500" />
+                  3. Plan Başlığı (İsteğe Bağlı)
+                </h3>
+                <div className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                  <textarea 
+                    value={planTitle}
+                    onChange={(e) => setPlanTitle(e.target.value)}
+                    placeholder="Örn: 2026-2027 EĞİTİM ÖĞRETİM YILI BİLİŞİM TEKNOLOJİLERİ DERSİ YILLIK PLANI"
+                    rows={2}
+                    className="block w-full p-3 text-base border-slate-300 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm rounded-xl border bg-white shadow-sm"
+                  />
+                  <p className="mt-2 text-xs text-slate-500">
+                    Boş bırakırsanız varsayılan başlık kullanılır.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

@@ -7,3 +7,5 @@ pdfplumber
 pytesseract
 pillow
 reportlab
+google-generativeai
+python-dotenv
