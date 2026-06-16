@@ -12,6 +12,7 @@ export default function AppPage() {
   const [weeklyHours, setWeeklyHours] = useState("");
   const [status, setStatus] = useState("idle"); // idle, processing, preview, success, error
   const [errorMessage, setErrorMessage] = useState("");
+  const [processingStep, setProcessingStep] = useState("");
   const [previewData, setPreviewData] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -126,37 +127,73 @@ export default function AppPage() {
 
     setStatus("processing");
     setErrorMessage("");
+    setProcessingStep("Dosya okunuyor...");
 
     try {
       if (isWordOrPdf) {
-        setErrorMessage(fileName.endsWith('.docx') ? "Word dosyası analiz ediliyor..." : "PDF dosyası analiz ediliyor...");
-        
         try {
           const arrayBuffer = await file.arrayBuffer();
           let extractedRows = [];
 
           if (fileName.endsWith('.docx')) {
+            setProcessingStep("Word belgesindeki metinler ayıklanıyor...");
             const result = await mammoth.extractRawText({ arrayBuffer });
             const rawText = result.value;
             
+            if (!rawText || rawText.trim().length === 0) {
+              throw new Error("Word dosyasından okunabilir metin çıkarılamadı.");
+            }
+
             // Call Gemini API to extract data
-            setErrorMessage("Yapay zeka verileri analiz edip ayıklıyor (yaklaşık 5-10 saniye)...");
-            const aiResponse = await fetch("/api/process", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rawText: rawText }),
-            });
+            setProcessingStep("Yapay zeka analizi başlatılıyor...");
             
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
+            let aiResponse;
+            try {
+              aiResponse = await fetch("/api/process", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ rawText: rawText }),
+                  signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+            } catch (fetchErr) {
+              clearTimeout(timeoutId);
+              if (fetchErr.name === 'AbortError') {
+                throw new Error("Yapay zeka yanıt verme süresi aşıldı (Zaman Aşımı).");
+              }
+              throw fetchErr;
+            }
+
+            setProcessingStep("Yapay zeka yanıtı işleniyor...");
             if (!aiResponse.ok) {
-                const errData = await aiResponse.json();
-                throw new Error("Yapay zeka analiz hatası: " + (errData.error || aiResponse.statusText));
+                let errMsg = "Sunucu hatası";
+                try {
+                    const errData = await aiResponse.json();
+                    errMsg = errData.error || errMsg;
+                } catch(e) {
+                    try {
+                        const errText = await aiResponse.text();
+                        if (errText.includes("504") || errText.includes("Timeout")) {
+                            errMsg = "Yapay zeka işlem süresi aşıldı (Vercel 10 saniye limiti). Lütfen daha küçük bir dosya yükleyin veya tekrar deneyin.";
+                        } else {
+                            errMsg = `Hata Kodu ${aiResponse.status}: ${aiResponse.statusText}`;
+                        }
+                    } catch(e2) {
+                        errMsg = `Hata Kodu ${aiResponse.status}: ${aiResponse.statusText}`;
+                    }
+                }
+                throw new Error(errMsg);
             }
             
             const aiData = await aiResponse.json();
             if (!aiData.data || aiData.data.length === 0) {
-                throw new Error("Yapay zeka plandan veri çıkaramadı.");
+                throw new Error("Yapay zeka plandan veri çıkaramadı veya uygun tablo formatı bulamadı.");
             }
             
+            setProcessingStep("Excel şablonu oluşturuluyor...");
             const parsedData = aiData.data;
             const docTitle = "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
             
@@ -173,6 +210,7 @@ export default function AppPage() {
             generateExcelFromContent(extractedRows, true, null, null, null, docTitle);
             return;
           } else if (fileName.endsWith('.pdf')) {
+            setProcessingStep("PDF belgesindeki metinler ayıklanıyor...");
             // PDF.js ile PDF'ten metin çıkarma
             const pdfjsLib = await import("pdfjs-dist/build/pdf");
             pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -187,6 +225,7 @@ export default function AppPage() {
               fullText += pageText + "\n";
             }
             
+            setProcessingStep("PDF satırları işleniyor...");
             // PDF metni çok karmaşıktır, satırlara bölüp 20 karakterden uzunları kazanım/konu gibi alıyoruz
             const lines = fullText.split('\n').filter(line => line.trim().length > 20);
             lines.forEach(line => {
@@ -206,9 +245,11 @@ export default function AppPage() {
              extractedRows.push({ 4: {v: "Tablo okunamadı", t:'s'}, 5: {v: "Lütfen manuel giriniz", t:'s'} });
           }
 
+            setProcessingStep("Excel şablonu oluşturuluyor...");
             generateExcelFromContent(extractedRows, true); // true = sıfırdan şablon üret
             return;
         } catch (err) {
+          console.error("isWordOrPdf processing error:", err);
           setErrorMessage("Dosya analiz edilemedi: " + err.message);
           setStatus("error");
         }
@@ -216,9 +257,11 @@ export default function AppPage() {
       }
 
       // --- KLASİK EXCEL İŞLEME SÜRECİ ---
+      setProcessingStep("Excel dosyası okunuyor...");
       const reader = new FileReader();
       reader.onload = function(evt) {
         try {
+          setProcessingStep("Excel verileri çözümleniyor...");
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array', cellStyles: true });
           const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -282,6 +325,7 @@ export default function AppPage() {
             }
           }
 
+          setProcessingStep("Yeni şablon oluşturuluyor...");
           generateExcelFromContent(contentRows, false, worksheet, range, colMap);
 
         } catch (err) {
@@ -626,6 +670,9 @@ export default function AppPage() {
                     <div className="flex flex-col items-center text-indigo-600">
                       <Loader2 className="w-10 h-10 animate-spin mb-3" />
                       <span className="font-medium">Plan Üretiliyor...</span>
+                      {processingStep && (
+                        <span className="text-sm text-slate-500 mt-2 font-medium animate-pulse">{processingStep}</span>
+                      )}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center text-slate-500 group-hover:text-indigo-600 transition-colors">

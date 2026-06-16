@@ -16,8 +16,6 @@ export async function POST(req) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
     const prompt = `
 Sen bir öğretmensin. Aşağıda bir öğretmenin eski yıllık planının ham tablosu veya metni verilmiştir.
 Görev: Bu metindeki verileri okuyup, ders içeriğini satır satır sırayla ayıklayarak saf bir JSON dizisi oluşturmak.
@@ -40,12 +38,46 @@ Dikkat:
 2. SADECE GEÇERLİ BİR JSON dondur, kod blogu (\`\`\`json) kullanma, fazladan kelime etme.
 
 Ham Tablo Verisi (Sınırlandırılmış):
-${rawText.substring(0, 35000)}
+${rawText.substring(0, 25000)}
 `;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    
+    const modelsToTry = [
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-3.5-flash"
+    ];
+
+    let responseText = null;
+    let lastError = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`Trying Gemini model: ${modelName}`);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        });
+        
+        const result = await model.generateContent(prompt);
+        responseText = result.response.text();
+        if (responseText && responseText.trim().length > 0) {
+          console.log(`Successfully generated content using: ${modelName}`);
+          break;
+        }
+      } catch (err) {
+        console.error(`Error with model ${modelName}:`, err.message || err);
+        lastError = err;
+        continue;
+      }
+    }
+
+    if (!responseText) {
+      throw new Error(`Yapay zeka modellerinin tümü yoğunluk nedeniyle meşgul veya hata verdi. Son hata: ${lastError ? lastError.message : "Bilinmeyen Hata"}`);
+    }
+
     // Parse the JSON
     let parsedData = [];
     try {
