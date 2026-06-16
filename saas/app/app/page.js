@@ -216,8 +216,16 @@ export default function AppPage() {
                
                if (!isHeader && rowDataArray.length > 0) {
                  let hasContent = false;
-                 for (let cell of rowDataArray) { if (cell.v) hasContent = true; }
-                 if (hasContent) extractedRows.push(rowDataArray);
+                 for (let cell of rowDataArray) { if (cell && cell.v && String(cell.v).trim() !== "") hasContent = true; }
+                 if (hasContent) {
+                   let mappedObj = {};
+                   let targetC = 4;
+                   for (let k = 0; k < rowDataArray.length; k++) {
+                     mappedObj[targetC] = rowDataArray[k];
+                     targetC++;
+                   }
+                   extractedRows.push(mappedObj);
+                 }
                }
             }
 
