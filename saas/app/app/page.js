@@ -187,6 +187,15 @@ export default function AppPage() {
             });
             
             // Grid'i dolaşarak mockWorksheet ve extractedRows'u oluştur
+            let headerEndRow = 3;
+            for (let R = 0; R < grid.length && R < 10; R++) {
+               if (!grid[R]) continue;
+               let rowStr = grid[R].map(c => c ? c.v : "").join(" ").toUpperCase();
+               if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
+                  headerEndRow = R;
+               }
+            }
+
             for (let R = 0; R < grid.length; R++) {
                let rowGrid = grid[R] || [];
                let rowData = {};
@@ -196,7 +205,7 @@ export default function AppPage() {
                   let cellObj = rowGrid[C];
                   if (!cellObj) cellObj = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} }, font: { name: "Times New Roman", sz: 12 }, alignment: { wrapText: true, vertical: "center" } } };
                   
-                  if (R <= 3 || (cellObj.v && cellObj.v.includes("EĞİTİM"))) {
+                  if (R <= headerEndRow) {
                      mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})] = cellObj;
                      isHeader = true;
                   } else {
@@ -374,27 +383,24 @@ export default function AppPage() {
       
       let maxCols = oldRange ? oldRange.e.c : 8; // A-I (8)
 
-      if (isFromPdf || !oldWorksheet || !oldWorksheet['!cols'] || oldWorksheet['!cols'].length === 0) {
-        newWs['!cols'] = [
-          {wch: 5},   // Sıra / Ay
-          {wch: 12},  // Tarih / Hafta
-          {wch: 5},   // Saat
-          {wch: 45},  // Kazanımlar
-          {wch: 25},  // Konular
-          {wch: 18},  // Yöntem
-          {wch: 18},  // Materyal
-          {wch: 12}   // Açıklama
-        ];
-      } else {
-        newWs['!cols'] = oldWorksheet['!cols'];
-      }
+      // A4 Yatay (Landscape) için optimize edilmiş sütun genişlikleri (Kelimelerin bölünmemesi için)
+      newWs['!cols'] = [
+        {wch: 8},   // A: Sıra / Ay
+        {wch: 15},  // B: Tarih / Hafta
+        {wch: 6},   // C: Saat
+        {wch: 40},  // D: Kazanımlar
+        {wch: 25},  // E: Konular
+        {wch: 15},  // F: Yöntem
+        {wch: 15},  // G: Materyal
+        {wch: 12}   // H: Açıklama
+      ];
 
       if (isFromPdf || !oldWorksheet) {
         // Sıfırdan şablon oluştur
         const headerStyle = { font: { bold: true, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
         
         // Üst Başlık
-        newWs['A1'] = { v: "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI", t: 's', s: { font: { bold: true, sz: 14 }, alignment: { horizontal: "center" } } };
+        newWs['A1'] = { v: "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI", t: 's', s: { font: { bold: true, sz: 14 }, alignment: { horizontal: "center", vertical: "center" } } };
         newWs['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
         
         const headers = ["SIRA", "AY", "HAFTA / TARİH", "SAAT", "KAZANIMLAR", "KONULAR", "YÖNTEM/TEKNİK", "MATERYALLER", "AÇIKLAMA"];
@@ -402,15 +408,27 @@ export default function AppPage() {
           newWs[XLSX.utils.encode_cell({c: c, r: 3})] = { v: headers[c], t: 's', s: headerStyle };
         }
       } else {
+        // Dinamik Header tespiti
+        let headerEndRow = 3;
+        for (let R = 0; R <= 10 && R <= oldRange.e.r; ++R) {
+           let rowStr = "";
+           for (let C = 0; C <= oldRange.e.c; ++C) {
+              let cell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
+              if (cell && cell.v) rowStr += cell.v.toString().toUpperCase() + " ";
+           }
+           if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
+              headerEndRow = R;
+           }
+        }
+
         // Eski şablonu kopyala
         let titleRow = -1;
-        for (let R = 0; R <= 3; ++R) {
+        for (let R = 0; R <= headerEndRow; ++R) {
           for (let C = 0; C <= oldRange.e.c; ++C) {
             let oldCell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
             if (oldCell) {
               let newV = replaceYears(oldCell.v);
               if (typeof newV === 'string' && (newV.includes("2026-2027") || newV.toUpperCase().includes("EĞİTİM") || newV.toUpperCase().includes("ÖĞRETİM") || newV.toUpperCase().includes("YILI") || newV.toUpperCase().includes("PLAN"))) {
-                // Sadece en üstteki anlamlı satırı başlık olarak al (eğer daha önce bulunmadıysa veya bu satır daha uzunsa)
                 if (titleRow === -1) {
                   titleRow = R;
                 }
@@ -428,7 +446,7 @@ export default function AppPage() {
         
         if(oldWorksheet['!merges']) {
           for(let m of oldWorksheet['!merges']) {
-            if(m.s.r <= 3 && m.s.r !== titleRow) newWs['!merges'].push(m);
+            if(m.s.r <= headerEndRow && m.s.r !== titleRow) newWs['!merges'].push(m);
           }
         }
 
