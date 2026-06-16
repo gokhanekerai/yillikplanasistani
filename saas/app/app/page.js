@@ -193,6 +193,12 @@ export default function AppPage() {
               if (tables.length > 0) {
                 console.log("Word tablosu bulundu, tarayıcıda doğrudan ayıklanıyor...");
                 
+                let lastKazanimC = -1;
+                let lastKonuC = -1;
+                let lastYontemC = -1;
+                let lastMateryalC = -1;
+                let lastAciklamaC = -1;
+
                 tables.forEach((table) => {
                   const rows = table.querySelectorAll('tr');
                   if (rows.length === 0) return;
@@ -240,12 +246,9 @@ export default function AppPage() {
                      }
                   }
                   
-                  if (headerEndRow === -1 && grid.length > 0) {
-                     headerEndRow = 0;
-                  }
+                  let kazanimC = -1, konuC = -1, yontemC = -1, materyalC = -1, aciklamaC = -1;
 
                   if (headerEndRow !== -1) {
-                    let kazanimC = -1, konuC = -1, yontemC = -1, materyalC = -1, aciklamaC = -1;
                     let headerRow = grid[headerEndRow];
                     if (headerRow) {
                        for (let c = 0; c <= maxC; c++) {
@@ -279,32 +282,46 @@ export default function AppPage() {
                     if (materyalC === -1) materyalC = remainingC.length > 0 ? remainingC.shift() : -1;
                     if (aciklamaC === -1) aciklamaC = remainingC.length > 0 ? remainingC.shift() : -1;
 
-                    for (let R = headerEndRow + 1; R < grid.length; R++) {
-                       let rowGrid = grid[R];
-                       if (!rowGrid) continue;
-                       
-                       let rowData = {
-                          4: kazanimC !== -1 && rowGrid[kazanimC] ? { v: rowGrid[kazanimC].v, t: 's' } : { v: "", t: 's' },
-                          5: konuC !== -1 && rowGrid[konuC] ? { v: rowGrid[konuC].v, t: 's' } : { v: "", t: 's' },
-                          6: yontemC !== -1 && rowGrid[yontemC] ? { v: rowGrid[yontemC].v, t: 's' } : { v: "", t: 's' },
-                          7: materyalC !== -1 && rowGrid[materyalC] ? { v: rowGrid[materyalC].v, t: 's' } : { v: "", t: 's' },
-                          8: aciklamaC !== -1 && rowGrid[aciklamaC] ? { v: cleanAçıklamaText(rowGrid[aciklamaC].v), t: 's' } : { v: "", t: 's' }
-                       };
-                       
-                       let hasContent = false;
-                       for (let k in rowData) {
-                          if (rowData[k].v && String(rowData[k].v).trim() !== "") {
-                             hasContent = true;
-                          }
-                       }
-                       
-                       let rowStr = rowGrid.map(c => c ? c.v : "").join(" ").toUpperCase();
-                       let isHeaderRow = rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"));
-                       
-                       if (hasContent && !isHeaderRow) {
-                          extractedRows.push(rowData);
-                       }
-                    }
+                    // Son tespiti kaydet
+                    lastKazanimC = kazanimC;
+                    lastKonuC = konuC;
+                    lastYontemC = yontemC;
+                    lastMateryalC = materyalC;
+                    lastAciklamaC = aciklamaC;
+                  } else {
+                    // Bu sayfada başlık yok, bir önceki sayfanın sütun konumlarını kullan
+                    kazanimC = lastKazanimC !== -1 ? lastKazanimC : 4;
+                    konuC = lastKonuC !== -1 ? lastKonuC : 5;
+                    yontemC = lastYontemC !== -1 ? lastYontemC : 6;
+                    materyalC = lastMateryalC !== -1 ? lastMateryalC : 7;
+                    aciklamaC = lastAciklamaC !== -1 ? lastAciklamaC : 8;
+                  }
+
+                  for (let R = headerEndRow + 1; R < grid.length; R++) {
+                     let rowGrid = grid[R];
+                     if (!rowGrid) continue;
+                     
+                     let rowData = {
+                        4: kazanimC !== -1 && rowGrid[kazanimC] ? { v: rowGrid[kazanimC].v, t: 's' } : { v: "", t: 's' },
+                        5: konuC !== -1 && rowGrid[konuC] ? { v: rowGrid[konuC].v, t: 's' } : { v: "", t: 's' },
+                        6: yontemC !== -1 && rowGrid[yontemC] ? { v: rowGrid[yontemC].v, t: 's' } : { v: "", t: 's' },
+                        7: materyalC !== -1 && rowGrid[materyalC] ? { v: rowGrid[materyalC].v, t: 's' } : { v: "", t: 's' },
+                        8: aciklamaC !== -1 && rowGrid[aciklamaC] ? { v: cleanAçıklamaText(rowGrid[aciklamaC].v), t: 's' } : { v: "", t: 's' }
+                     };
+                     
+                     let hasContent = false;
+                     for (let k in rowData) {
+                        if (rowData[k].v && String(rowData[k].v).trim() !== "") {
+                           hasContent = true;
+                        }
+                     }
+                     
+                     let rowStr = rowGrid.map(c => c ? c.v : "").join(" ").toUpperCase();
+                     let isHeaderRow = rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"));
+                     
+                     if (hasContent && !isHeaderRow) {
+                        extractedRows.push(rowData);
+                     }
                   }
                 });
 
