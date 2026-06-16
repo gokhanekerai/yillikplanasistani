@@ -5,12 +5,6 @@ import Link from "next/link";
 import { ArrowLeft, Calendar, Upload, FileSpreadsheet, Download, Settings, ChevronRight, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 import * as mammoth from "mammoth";
-import * as pdfjsLib from "pdfjs-dist/build/pdf";
-
-// PDF.js Worker Ayarı (CDN üzerinden)
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
 
 const TURKISH_MONTHS = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
 
@@ -171,6 +165,9 @@ export default function AppPage() {
 
           } else if (fileName.endsWith('.pdf')) {
             // PDF.js ile PDF'ten metin çıkarma
+            const pdfjsLib = await import("pdfjs-dist/build/pdf");
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
             const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
             const pdfDoc = await loadingTask.promise;
             let fullText = "";
@@ -396,12 +393,6 @@ export default function AppPage() {
     } catch (err) {
       console.error(err);
       setErrorMessage("Plan üretilirken bir hata oluştu: " + err.message);
-      setStatus("error");
-    }
-  };
-      reader.readAsArrayBuffer(file);
-    } catch (err) {
-      setErrorMessage("Dosya okunamadı: " + err.message);
       setStatus("error");
     }
   };
