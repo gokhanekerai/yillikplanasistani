@@ -117,9 +117,8 @@ export default function AppPage() {
       return;
     }
 
-    const totalWeeklyHours = Object.values(schedule).reduce((a, b) => a + b, 0);
-    if (totalWeeklyHours === 0) {
-      setErrorMessage("Lütfen en az bir güne ders saati giriniz.");
+    if (!weeklyHours || parseInt(weeklyHours) <= 0) {
+      setErrorMessage("Lütfen geçerli bir haftalık ders saati giriniz.");
       setStatus("error");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
