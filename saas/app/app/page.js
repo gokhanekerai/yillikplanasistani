@@ -109,6 +109,45 @@ export default function AppPage() {
     return weeks;
   };
 
+  const cleanAçıklamaText = (text) => {
+    if (typeof text !== 'string') return "";
+    
+    // Sınıf içi araç gereçlerin temizlenmesi
+    const materialsKeywords = [
+      "tahta kalemi", "silgi", "kitap", "ders kitabı", "defter", "bilgisayar", "projeksiyon", 
+      "akıllı tahta", "internet", "slayt", "sunu", "etkileşimli tahta", "pdf", "e-içerik", 
+      "eba", "ogm materyal", "kaynak", "materyal", "araç", "gereç", "video", "görsel",
+      "whiteboard", "marker", "eraser", "computer", "projector", "smart board", "presentation",
+      "kalem", "öğretmen kılavuzu", "kılavuz kitap", "hoparlör", "yazıcı", "tablet", "kâğıt",
+      "karton", "yapıştırıcı", "makas", "pano", "çalışma yaprağı", "fotokopi", "resim",
+      "fotoğraf", "afiş", "broşür", "etkinlik kağıdı"
+    ];
+    
+    const lines = text.split('\n');
+    const cleanedLines = lines.filter(line => {
+      const lowerLine = line.toLowerCase().trim();
+      if (lowerLine === "") return false;
+      
+      const containsMaterial = materialsKeywords.some(kw => lowerLine.includes(kw));
+      if (containsMaterial) {
+        // İstisnalar: Belirli gün ve haftalar, yazılı sınavlar, Atatürkçülük konuları vb.
+        const exceptions = [
+          "sınav", "yazılı", "bayram", "atatürk", "belirli", "hafta", "gün", 
+          "1. dönem", "2. dönem", "millî", "milli", "cumhuriyet", "kurtuluş", 
+          "kazanım", "konu", "gezi", "gözlem", "deney"
+        ];
+        const hasException = exceptions.some(exc => lowerLine.includes(exc));
+        if (hasException) {
+          return true;
+        }
+        return false; // Araç-gereç listesiyse temizle
+      }
+      return true;
+    });
+    
+    return cleanedLines.join('\n');
+  };
+
   const processFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -142,7 +181,6 @@ export default function AppPage() {
           let extractedRows = [];
 
           if (fileName.endsWith('.docx')) {
-            // 1. ÖNCELİKLİ YÖNTEM: Tarayıcı tarafında doğrudan tablo çözümleme (Son derece hızlı ve 100% tutarlı)
             try {
               setProcessingStep("Word belgesindeki tablolar çözümleniyor...");
               const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
@@ -150,90 +188,126 @@ export default function AppPage() {
               
               const parser = new DOMParser();
               const doc = parser.parseFromString(html, "text/html");
-              const rows = doc.querySelectorAll('tr');
+              const tables = doc.querySelectorAll('table');
               
-              if (rows.length > 0) {
+              if (tables.length > 0) {
                 console.log("Word tablosu bulundu, tarayıcıda doğrudan ayıklanıyor...");
                 
-                let maxC = 0;
-                let grid = [];
-                let merges = [];
+                tables.forEach((table) => {
+                  const rows = table.querySelectorAll('tr');
+                  if (rows.length === 0) return;
+                  
+                  let maxC = 0;
+                  let grid = [];
+                  let merges = [];
 
-                rows.forEach((tr, R) => {
-                  const cells = tr.querySelectorAll('td, th');
-                  let C = 0;
-                  cells.forEach((cell) => {
-                     while (grid[R] && grid[R][C] !== undefined) C++;
-                     
-                     let colspan = parseInt(cell.getAttribute('colspan')) || 1;
-                     let rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
-                     let text = cell.innerHTML.replace(/<br\s*[\/]?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, "").trim();
-                     
-                     if (colspan > 1 || rowspan > 1) {
-                       merges.push({s: {r: R, c: C}, e: {r: R + rowspan - 1, c: C + colspan - 1}});
-                     }
+                  rows.forEach((tr, R) => {
+                    const cells = tr.querySelectorAll('td, th');
+                    let C = 0;
+                    cells.forEach((cell) => {
+                       while (grid[R] && grid[R][C] !== undefined) C++;
+                       
+                       let colspan = parseInt(cell.getAttribute('colspan')) || 1;
+                       let rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+                       let text = cell.innerHTML.replace(/<br\s*[\/]?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, "").trim();
+                       
+                       if (colspan > 1 || rowspan > 1) {
+                         merges.push({s: {r: R, c: C}, e: {r: R + rowspan - 1, c: C + colspan - 1}});
+                       }
 
-                     for(let r = 0; r < rowspan; r++) {
-                        for(let c = 0; c < colspan; c++) {
-                           if (!grid[R+r]) grid[R+r] = [];
-                           if (r === 0 && c === 0) {
-                              grid[R+r][C+c] = { v: text, t: 's' };
-                           } else {
-                              grid[R+r][C+c] = { v: "", t: 's', merged: true };
-                           }
-                        }
-                     }
-                     C += colspan;
+                       for(let r = 0; r < rowspan; r++) {
+                          for(let c = 0; c < colspan; c++) {
+                             if (!grid[R+r]) grid[R+r] = [];
+                             if (r === 0 && c === 0) {
+                                grid[R+r][C+c] = { v: text, t: 's' };
+                             } else {
+                                grid[R+r][C+c] = { v: "", t: 's', merged: true };
+                             }
+                          }
+                       }
+                       C += colspan;
+                    });
+                    if (C - 1 > maxC) maxC = C - 1;
                   });
-                  if (C - 1 > maxC) maxC = C - 1;
+                  
+                  let headerEndRow = -1;
+                  for (let R = 0; R < grid.length && R < 10; R++) {
+                     if (!grid[R]) continue;
+                     let rowStr = grid[R].map(c => c ? c.v : "").join(" ").toUpperCase();
+                     if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
+                        headerEndRow = R;
+                        break;
+                     }
+                  }
+                  
+                  if (headerEndRow === -1 && grid.length > 0) {
+                     headerEndRow = 0;
+                  }
+
+                  if (headerEndRow !== -1) {
+                    let kazanimC = -1, konuC = -1, yontemC = -1, materyalC = -1, aciklamaC = -1;
+                    let headerRow = grid[headerEndRow];
+                    if (headerRow) {
+                       for (let c = 0; c <= maxC; c++) {
+                          let cell = headerRow[c];
+                          if (cell && cell.v) {
+                             let text = cell.v.toUpperCase();
+                             if ((text.includes("KAZANIM") || text.includes("HEDEF") || text.includes("BECERİ")) && kazanimC === -1) kazanimC = c;
+                             else if (text.includes("KONU") && konuC === -1) konuC = c;
+                             else if ((text.includes("YÖNTEM") || text.includes("TEKNİK")) && yontemC === -1) yontemC = c;
+                             else if ((text.includes("MATERYAL") || text.includes("ARAÇ") || text.includes("GEREÇ") || text.includes("KAYNAK")) && materyalC === -1) materyalC = c;
+                             else if ((text.includes("AÇIKLAMA") || text.includes("DEĞERLENDİRME") || text.includes("ÖLÇME")) && aciklamaC === -1) aciklamaC = c;
+                          }
+                       }
+                    }
+
+                    const remainingC = [];
+                    if (headerRow) {
+                       for (let c = 0; c <= maxC; c++) {
+                          let cell = headerRow[c];
+                          let text = (cell && cell.v || "").toUpperCase();
+                          let isTimeCol = text.includes("AY") || text.includes("HAFTA") || text.includes("TARİH") || text.includes("SAAT") || text.includes("SÜRE") || text.includes("SIRA");
+                          if (!isTimeCol && c !== kazanimC && c !== konuC && c !== yontemC && c !== materyalC && c !== aciklamaC) {
+                             remainingC.push(c);
+                          }
+                       }
+                    }
+
+                    if (kazanimC === -1) kazanimC = remainingC.length > 0 ? remainingC.shift() : -1;
+                    if (konuC === -1) konuC = remainingC.length > 0 ? remainingC.shift() : -1;
+                    if (yontemC === -1) yontemC = remainingC.length > 0 ? remainingC.shift() : -1;
+                    if (materyalC === -1) materyalC = remainingC.length > 0 ? remainingC.shift() : -1;
+                    if (aciklamaC === -1) aciklamaC = remainingC.length > 0 ? remainingC.shift() : -1;
+
+                    for (let R = headerEndRow + 1; R < grid.length; R++) {
+                       let rowGrid = grid[R];
+                       if (!rowGrid) continue;
+                       
+                       let rowData = {
+                          4: kazanimC !== -1 && rowGrid[kazanimC] ? { v: rowGrid[kazanimC].v, t: 's' } : { v: "", t: 's' },
+                          5: konuC !== -1 && rowGrid[konuC] ? { v: rowGrid[konuC].v, t: 's' } : { v: "", t: 's' },
+                          6: yontemC !== -1 && rowGrid[yontemC] ? { v: rowGrid[yontemC].v, t: 's' } : { v: "", t: 's' },
+                          7: materyalC !== -1 && rowGrid[materyalC] ? { v: rowGrid[materyalC].v, t: 's' } : { v: "", t: 's' },
+                          8: aciklamaC !== -1 && rowGrid[aciklamaC] ? { v: cleanAçıklamaText(rowGrid[aciklamaC].v), t: 's' } : { v: "", t: 's' }
+                       };
+                       
+                       let hasContent = false;
+                       for (let k in rowData) {
+                          if (rowData[k].v && String(rowData[k].v).trim() !== "") {
+                             hasContent = true;
+                          }
+                       }
+                       
+                       let rowStr = rowGrid.map(c => c ? c.v : "").join(" ").toUpperCase();
+                       let isHeaderRow = rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"));
+                       
+                       if (hasContent && !isHeaderRow) {
+                          extractedRows.push(rowData);
+                       }
+                    }
+                  }
                 });
-                
-                let headerEndRow = 3;
-                for (let R = 0; R < grid.length && R < 10; R++) {
-                   if (!grid[R]) continue;
-                   let rowStr = grid[R].map(c => c ? c.v : "").join(" ").toUpperCase();
-                   if (rowStr.includes("KAZANIM") || (rowStr.includes("AY") && rowStr.includes("HAFTA"))) {
-                      let kazanimC = -1, konuC = -1, yontemC = -1, materyalC = -1, aciklamaC = -1;
-                      let headerRow = grid[R];
-                      for (let c = 0; c <= maxC; c++) {
-                         let cell = headerRow[c];
-                         if (cell && cell.v) {
-                            let text = cell.v.toUpperCase();
-                            if ((text.includes("KAZANIM") || text.includes("HEDEF") || text.includes("BECERİ")) && kazanimC === -1) kazanimC = c;
-                            else if (text.includes("KONU") && konuC === -1) konuC = c;
-                            else if ((text.includes("YÖNTEM") || text.includes("TEKNİK")) && yontemC === -1) yontemC = c;
-                            else if ((text.includes("MATERYAL") || text.includes("ARAÇ") || text.includes("GEREÇ") || text.includes("KAYNAK")) && materyalC === -1) materyalC = c;
-                            else if ((text.includes("AÇIKLAMA") || text.includes("DEĞERLENDİRME") || text.includes("ÖLÇME")) && aciklamaC === -1) aciklamaC = c;
-                         }
-                      }
-                      const remainingC = [];
-                      for (let c = 0; c <= maxC; c++) {
-                         let text = (headerRow[c] && headerRow[c].v || "").toUpperCase();
-                         if (!text.includes("AY") && !text.includes("HAFTA") && !text.includes("TARİH") && !text.includes("SAAT") && !text.includes("SÜRE") && !text.includes("SIRA") && c !== kazanimC && c !== konuC && c !== yontemC && c !== materyalC && c !== aciklamaC) {
-                            remainingC.push(c);
-                         }
-                      }
-                      if (kazanimC === -1) kazanimC = remainingC.length > 0 ? remainingC.shift() : -1;
-                      if (konuC === -1) konuC = remainingC.length > 0 ? remainingC.shift() : -1;
-                      if (yontemC === -1) yontemC = remainingC.length > 0 ? remainingC.shift() : -1;
-                      if (materyalC === -1) materyalC = remainingC.length > 0 ? remainingC.shift() : -1;
-                      if (aciklamaC === -1) aciklamaC = remainingC.length > 0 ? remainingC.shift() : -1;
-                      for (let rIdx = R + 1; rIdx < grid.length; rIdx++) {
-                          let rowGrid = grid[rIdx];
-                          if (!rowGrid) continue;
-                          let rowData = {
-                             4: kazanimC !== -1 && rowGrid[kazanimC] ? { v: rowGrid[kazanimC].v, t: 's' } : { v: "", t: 's' },
-                             5: konuC !== -1 && rowGrid[konuC] ? { v: rowGrid[konuC].v, t: 's' } : { v: "", t: 's' },
-                             6: yontemC !== -1 && rowGrid[yontemC] ? { v: rowGrid[yontemC].v, t: 's' } : { v: "", t: 's' },
-                             7: materyalC !== -1 && rowGrid[materyalC] ? { v: rowGrid[materyalC].v, t: 's' } : { v: "", t: 's' },
-                             8: aciklamaC !== -1 && rowGrid[aciklamaC] ? { v: cleanAçıklamaText(rowGrid[aciklamaC].v), t: 's' } : { v: "", t: 's' }
-                          };
-                          let hasContent = false;
-                          for (let k in rowData) { if (rowData[k].v && String(rowData[k].v).trim() !== "") hasContent = true; }
-                          if (hasContent) extractedRows.push(rowData);
-                      }
-                   }
-                }
+
                 if (extractedRows.length > 0) {
                   setProcessingStep("Excel şablonu oluşturuluyor...");
                   const docTitle = "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
@@ -512,44 +586,7 @@ export default function AppPage() {
         return text.replace(/202[2345]\D{0,5}202[3456]/g, "2026-2027");
       };
 
-      const cleanAçıklamaText = (text) => {
-        if (typeof text !== 'string') return "";
-        
-        // Sınıf içi araç gereçlerin temizlenmesi
-        const materialsKeywords = [
-          "tahta kalemi", "silgi", "kitap", "ders kitabı", "defter", "bilgisayar", "projeksiyon", 
-          "akıllı tahta", "internet", "slayt", "sunu", "etkileşimli tahta", "pdf", "e-içerik", 
-          "eba", "ogm materyal", "kaynak", "materyal", "araç", "gereç", "video", "görsel",
-          "whiteboard", "marker", "eraser", "computer", "projector", "smart board", "presentation",
-          "kalem", "öğretmen kılavuzu", "kılavuz kitap", "hoparlör", "yazıcı", "tablet", "kâğıt",
-          "karton", "yapıştırıcı", "makas", "pano", "çalışma yaprağı", "fotokopi", "resim",
-          "fotoğraf", "afiş", "broşür", "etkinlik kağıdı"
-        ];
-        
-        const lines = text.split('\n');
-        const cleanedLines = lines.filter(line => {
-          const lowerLine = line.toLowerCase().trim();
-          if (lowerLine === "") return false;
-          
-          const containsMaterial = materialsKeywords.some(kw => lowerLine.includes(kw));
-          if (containsMaterial) {
-            // İstisnalar: Belirli gün ve haftalar, yazılı sınavlar, Atatürkçülük konuları vb.
-            const exceptions = [
-              "sınav", "yazılı", "bayram", "atatürk", "belirli", "hafta", "gün", 
-              "1. dönem", "2. dönem", "millî", "milli", "cumhuriyet", "kurtuluş", 
-              "kazanım", "konu", "gezi", "gözlem", "deney"
-            ];
-            const hasException = exceptions.some(exc => lowerLine.includes(exc));
-            if (hasException) {
-              return true;
-            }
-            return false; // Araç-gereç listesiyse temizle
-          }
-          return true;
-        });
-        
-        return cleanedLines.join('\n');
-      };
+
 
       const getBelirliGunVeYazili = (week, activeWeekIdx) => {
         const list = [];
