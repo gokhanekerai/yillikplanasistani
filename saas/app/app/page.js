@@ -158,7 +158,7 @@ export default function AppPage() {
             }
             
             const parsedData = aiData.data;
-            const docTitle = planTitle || "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+            const docTitle = "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
             
             extractedRows = parsedData.map(item => {
                return {
