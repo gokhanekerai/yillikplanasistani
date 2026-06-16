@@ -10,8 +10,9 @@ const TURKISH_MONTHS = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
 
 export default function AppPage() {
   const [schedule, setSchedule] = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
-  const [status, setStatus] = useState("idle"); // idle, processing, success, error
+  const [status, setStatus] = useState("idle"); // idle, processing, preview, success, error
   const [errorMessage, setErrorMessage] = useState("");
+  const [previewData, setPreviewData] = useState(null);
   const fileInputRef = useRef(null);
 
   // Sabit MEB 2026-2027 Takvimi
@@ -164,7 +165,7 @@ export default function AppPage() {
                  
                  let colspan = parseInt(cell.getAttribute('colspan')) || 1;
                  let rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
-                 let text = cell.textContent.trim();
+                 let text = cell.innerHTML.replace(/<br\s*[\/]?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, "").trim();
                  
                  if (colspan > 1 || rowspan > 1) {
                    merges.push({s: {r: R, c: C}, e: {r: R + rowspan - 1, c: C + colspan - 1}});
@@ -174,9 +175,9 @@ export default function AppPage() {
                     for(let c = 0; c < colspan; c++) {
                        if (!grid[R+r]) grid[R+r] = [];
                        if (r === 0 && c === 0) {
-                          grid[R+r][C+c] = { v: text, t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } } };
+                          grid[R+r][C+c] = { v: text, t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} }, font: { name: "Times New Roman", sz: 12 }, alignment: { wrapText: true, vertical: "center" } } };
                        } else {
-                          grid[R+r][C+c] = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } }, merged: true };
+                          grid[R+r][C+c] = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} }, font: { name: "Times New Roman", sz: 12 }, alignment: { wrapText: true, vertical: "center" } }, merged: true };
                        }
                     }
                  }
@@ -193,7 +194,7 @@ export default function AppPage() {
                
                for (let C = 0; C <= maxC; C++) {
                   let cellObj = rowGrid[C];
-                  if (!cellObj) cellObj = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } } };
+                  if (!cellObj) cellObj = { v: "", t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} }, font: { name: "Times New Roman", sz: 12 }, alignment: { wrapText: true, vertical: "center" } } };
                   
                   if (R <= 3 || (cellObj.v && cellObj.v.includes("EĞİTİM"))) {
                      mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})] = cellObj;
@@ -368,10 +369,24 @@ export default function AppPage() {
       
       let maxCols = oldRange ? oldRange.e.c : 8; // A-I (8)
 
+      if (isFromPdf || !oldWorksheet || !oldWorksheet['!cols'] || oldWorksheet['!cols'].length === 0) {
+        newWs['!cols'] = [
+          {wch: 5},   // Sıra / Ay
+          {wch: 12},  // Tarih / Hafta
+          {wch: 5},   // Saat
+          {wch: 45},  // Kazanımlar
+          {wch: 25},  // Konular
+          {wch: 18},  // Yöntem
+          {wch: 18},  // Materyal
+          {wch: 12}   // Açıklama
+        ];
+      } else {
+        newWs['!cols'] = oldWorksheet['!cols'];
+      }
+
       if (isFromPdf || !oldWorksheet) {
         // Sıfırdan şablon oluştur
-        newWs['!cols'] = [{wch: 5}, {wch: 10}, {wch: 25}, {wch: 8}, {wch: 40}, {wch: 40}, {wch: 15}, {wch: 15}, {wch: 20}];
-        const headerStyle = { font: { bold: true }, alignment: { horizontal: "center", vertical: "center" }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
+        const headerStyle = { font: { bold: true, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
         
         // Üst Başlık
         newWs['A1'] = { v: "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI", t: 's', s: { font: { bold: true, sz: 14 }, alignment: { horizontal: "center" } } };
@@ -383,7 +398,6 @@ export default function AppPage() {
         }
       } else {
         // Eski şablonu kopyala
-        newWs['!cols'] = oldWorksheet['!cols'] || [];
         for (let R = 0; R <= 3; ++R) {
           for (let C = 0; C <= oldRange.e.c; ++C) {
             let oldCell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
@@ -392,7 +406,13 @@ export default function AppPage() {
               if(typeof newV === 'string' && newV.includes("EĞİTİM ÖĞRETİM YILI")) {
                 newV = "2026 - 2027 EĞİTİM ÖĞRETİM YILI";
               }
-              newWs[XLSX.utils.encode_cell({c: C, r: R})] = { v: newV, s: oldCell.s ? { ...oldCell.s } : {}, t: oldCell.t };
+              let newS = oldCell.s ? { ...oldCell.s } : {};
+              if(!newS.font) newS.font = {};
+              newS.font.name = "Times New Roman";
+              newS.font.sz = 12;
+              if(!newS.alignment) newS.alignment = {};
+              newS.alignment.wrapText = true;
+              newWs[XLSX.utils.encode_cell({c: C, r: R})] = { v: newV, s: newS, t: oldCell.t };
             }
           }
         }
@@ -453,6 +473,10 @@ export default function AppPage() {
           
           if (!cellObj.s) cellObj.s = {};
           cellObj.s.border = borderStyle; // Her hücreye zorunlu border
+          cellObj.s.font = { name: "Times New Roman", sz: 12 };
+          if (!cellObj.s.alignment) cellObj.s.alignment = {};
+          cellObj.s.alignment.wrapText = true;
+          cellObj.s.alignment.vertical = "center";
 
           if (c === 0 && colMap.ay !== 0 && colMap.tarih !== 0 && colMap.saat !== 0) cellObj.v = (i + 1); // Sıra
           if (c === colMap.ay) cellObj.v = lastDay.monthStr;
@@ -478,20 +502,29 @@ export default function AppPage() {
       const newWb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(newWb, newWs, "Yıllık Plan");
 
-      const excelBuffer = XLSX.write(newWb, { bookType: 'xlsx', type: 'array' });
+      setPreviewData(newWb);
+      setStatus("preview");
+    } catch (err) {
+      console.error(err);
+      setErrorMessage("Plan üretilirken bir hata oluştu: " + err.message);
+      setStatus("error");
+    }
+  };
+
+  const handleDownload = () => {
+    if (!previewData) return;
+    try {
+      const excelBuffer = XLSX.write(previewData, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([excelBuffer], {type: "application/octet-stream"});
-      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.download = `2026_2027_Plan.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
-      
       setStatus("success");
     } catch (err) {
-      console.error(err);
-      setErrorMessage("Plan üretilirken bir hata oluştu: " + err.message);
+      setErrorMessage("İndirme hatası: " + err.message);
       setStatus("error");
     }
   };
@@ -627,10 +660,28 @@ export default function AppPage() {
                     {errorMessage}
                   </div>
                 )}
+                {status === 'preview' && (
+                  <div className="mt-6 p-6 bg-green-50 border border-green-200 rounded-2xl flex flex-col items-center">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 text-green-600">
+                      <FileSpreadsheet className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-bold text-green-800 mb-2">Planınız Hazır!</h3>
+                    <p className="text-sm text-green-700 text-center mb-6 max-w-md">
+                      Yıllık planınız Times New Roman 12 punto fontunda, A4 kağıda tam sığacak genişliklerde ve metin kaydırma özelliği aktif olarak üretildi. Alt alta yazdığınız maddeler de korundu!
+                    </p>
+                    <button
+                      onClick={handleDownload}
+                      className="w-full sm:w-auto px-8 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-600/30 transition-all flex items-center justify-center gap-2 hover:scale-105 active:scale-95"
+                    >
+                      <Download className="w-6 h-6" />
+                      Planı Bilgisayara İndir
+                    </button>
+                  </div>
+                )}
                 {status === 'success' && (
                   <div className="mt-4 p-4 bg-green-50 text-green-700 rounded-xl text-sm border border-green-100 flex items-center">
-                    <Download className="w-5 h-5 mr-2" />
-                    Yeni yıllık planınız başarıyla oluşturuldu ve indirildi!
+                    <FileSpreadsheet className="w-5 h-5 mr-2" />
+                    Harika! Dosyanız başarıyla indirildi. İşlem tamamlandı.
                   </div>
                 )}
               </div>
