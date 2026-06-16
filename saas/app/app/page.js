@@ -365,8 +365,7 @@ export default function AppPage() {
     try {
       const replaceYears = (text) => {
         if (typeof text !== 'string') return text;
-        return text.replace(/202[2345]\s*[-/]?\s*202[3456]/g, "2026-2027")
-                   .replace(/202[2345]\s+202[3456]/g, "2026 2027");
+        return text.replace(/202[2345]\D{0,5}202[3456]/g, "2026-2027");
       };
 
       const newWeeks = generateSchoolCalendar();
@@ -410,8 +409,11 @@ export default function AppPage() {
             let oldCell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
             if (oldCell) {
               let newV = replaceYears(oldCell.v);
-              if (typeof newV === 'string' && newV.includes("2026-2027")) {
-                titleRow = R;
+              if (typeof newV === 'string' && (newV.includes("2026-2027") || newV.toUpperCase().includes("EĞİTİM") || newV.toUpperCase().includes("ÖĞRETİM") || newV.toUpperCase().includes("YILI") || newV.toUpperCase().includes("PLAN"))) {
+                // Sadece en üstteki anlamlı satırı başlık olarak al (eğer daha önce bulunmadıysa veya bu satır daha uzunsa)
+                if (titleRow === -1) {
+                  titleRow = R;
+                }
               }
               let newS = oldCell.s ? { ...oldCell.s } : {};
               if(!newS.font) newS.font = {};
@@ -434,8 +436,10 @@ export default function AppPage() {
           let titleCell = null;
           for (let C = 0; C <= oldRange.e.c; ++C) {
              let cellAddr = XLSX.utils.encode_cell({c: C, r: titleRow});
-             if (newWs[cellAddr] && typeof newWs[cellAddr].v === 'string' && newWs[cellAddr].v.includes("2026-2027")) {
-                titleCell = newWs[cellAddr];
+             if (newWs[cellAddr] && typeof newWs[cellAddr].v === 'string' && newWs[cellAddr].v.trim() !== "") {
+                if (!titleCell || newWs[cellAddr].v.length > titleCell.v.length) {
+                   titleCell = newWs[cellAddr];
+                }
              }
              delete newWs[cellAddr];
           }
