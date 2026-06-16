@@ -148,21 +148,57 @@ export default function AppPage() {
             const doc = parser.parseFromString(html, 'text/html');
             const rows = doc.querySelectorAll('tr');
             
-            rows.forEach(tr => {
-              const cells = tr.querySelectorAll('td');
-              // Genelde yıllık planlarda çok sütun olur. Basit bir sezgisel yaklaşımla en uzun metinleri kazanım ve konu sayıyoruz.
-              if (cells.length >= 3) {
-                let cellTexts = Array.from(cells).map(td => td.textContent.trim()).filter(text => text.length > 5);
-                if (cellTexts.length >= 2) {
-                  // Son iki uzun metni Konu ve Kazanım olarak kabul edelim (Kaba bir tahmin, Word tablosu standart değilse)
-                  extractedRows.push({
-                    4: { v: cellTexts[0] || "", t: 's' },
-                    5: { v: cellTexts[1] || "", t: 's' }
-                  });
-                }
+            let mockWorksheet = {};
+            let mockRange = { s: { c: 0, r: 0 }, e: { c: 0, r: 0 } };
+            let extractedRows = [];
+            let maxC = 0;
+
+            rows.forEach((tr, R) => {
+              const cells = tr.querySelectorAll('td, th');
+              if (cells.length - 1 > maxC) maxC = cells.length - 1;
+              let rowData = {};
+              
+              cells.forEach((cell, C) => {
+                 let text = cell.textContent.trim();
+                 let cellObj = { v: text, t: 's', s: { border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } } };
+                 
+                 // İlk 4 satırı başlık (mockWorksheet) olarak kabul et
+                 if (R <= 3) {
+                    mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})] = cellObj;
+                 } else {
+                    rowData[C] = cellObj;
+                 }
+              });
+              
+              if (R > 3 && Object.keys(rowData).length > 0) {
+                 let hasContent = false;
+                 for (let k in rowData) { if (rowData[k].v) hasContent = true; }
+                 if (hasContent) extractedRows.push(rowData);
               }
             });
 
+            mockRange.e.c = maxC;
+            mockRange.e.r = rows.length > 0 ? rows.length - 1 : 0;
+            
+            // Dinamik Sütun Algılama
+            let colMap = { ay: -1, tarih: -1, saat: -1 };
+            for (let R = 0; R <= Math.min(5, mockRange.e.r); ++R) {
+              for (let C = 0; C <= mockRange.e.c; ++C) {
+                let cell = mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
+                if (cell && cell.v) {
+                  const text = cell.v.toUpperCase();
+                  if (text.includes("AY") && !text.includes("DETAY") && !text.includes("KAYNAK")) colMap.ay = C;
+                  if (text.includes("TARİH") || text.includes("HAFTA")) colMap.tarih = C;
+                  if (text.includes("SAAT") || text.includes("SÜRE")) colMap.saat = C;
+                }
+              }
+            }
+            if (colMap.ay === -1) colMap.ay = 1;
+            if (colMap.tarih === -1) colMap.tarih = 2;
+            if (colMap.saat === -1) colMap.saat = 3;
+
+            generateExcelFromContent(extractedRows, false, mockWorksheet, mockRange, colMap);
+            return;
           } else if (fileName.endsWith('.pdf')) {
             // PDF.js ile PDF'ten metin çıkarma
             const pdfjsLib = await import("pdfjs-dist/build/pdf");
@@ -197,8 +233,8 @@ export default function AppPage() {
              extractedRows.push({ 4: {v: "Tablo okunamadı", t:'s'}, 5: {v: "Lütfen manuel giriniz", t:'s'} });
           }
 
-          generateExcelFromContent(extractedRows, true); // true = sıfırdan şablon üret
-
+            generateExcelFromContent(extractedRows, true); // true = sıfırdan şablon üret
+            return;
         } catch (err) {
           setErrorMessage("Dosya analiz edilemedi: " + err.message);
           setStatus("error");
