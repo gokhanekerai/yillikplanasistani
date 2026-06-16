@@ -9,7 +9,7 @@ import * as mammoth from "mammoth";
 const TURKISH_MONTHS = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
 
 export default function AppPage() {
-  const [schedule, setSchedule] = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
+  const [weeklyHours, setWeeklyHours] = useState("");
   const [status, setStatus] = useState("idle"); // idle, processing, preview, success, error
   const [errorMessage, setErrorMessage] = useState("");
   const [previewData, setPreviewData] = useState(null);
@@ -32,9 +32,7 @@ export default function AppPage() {
     ]
   };
 
-  const handleScheduleChange = (day, value) => {
-    setSchedule(prev => ({ ...prev, [day]: parseInt(value) || 0 }));
-  };
+
 
   const isDateHoliday = (dateObj) => {
     const time = dateObj.getTime();
@@ -67,34 +65,31 @@ export default function AppPage() {
       };
 
       for (let d = 1; d <= 5; d++) {
-        const dailyHours = schedule[d];
-        if (dailyHours > 0) {
-          let checkDate = new Date(currentMonday);
-          checkDate.setDate(currentMonday.getDate() + (d - 1));
-          checkDate.setHours(12, 0, 0, 0);
-          
-          let dayStart = new Date(checkDate);
-          dayStart.setHours(0, 0, 0, 0);
+        let checkDate = new Date(currentMonday);
+        checkDate.setDate(currentMonday.getDate() + (d - 1));
+        checkDate.setHours(12, 0, 0, 0);
+        
+        let dayStart = new Date(checkDate);
+        dayStart.setHours(0, 0, 0, 0);
 
-          if (dayStart < mebCalendar.schoolStart) continue; 
-          if (dayStart > mebCalendar.schoolEnd) continue;
+        if (dayStart < mebCalendar.schoolStart) continue; 
+        if (dayStart > mebCalendar.schoolEnd) continue;
 
-          let holidayName = isDateHoliday(checkDate);
-          let dateStr = String(checkDate.getDate()).padStart(2, '0') + "." +
-                        String(checkDate.getMonth() + 1).padStart(2, '0') + "." +
-                        checkDate.getFullYear();
-          let monthStr = TURKISH_MONTHS[checkDate.getMonth()];
+        let holidayName = isDateHoliday(checkDate);
+        let dateStr = String(checkDate.getDate()).padStart(2, '0') + "." +
+                      String(checkDate.getMonth() + 1).padStart(2, '0') + "." +
+                      checkDate.getFullYear();
+        let monthStr = TURKISH_MONTHS[checkDate.getMonth()];
 
-          if (holidayName) {
-            weekInfo.days.push({
-              dateStr: dateStr, monthStr: monthStr, hours: dailyHours, isHoliday: true, holidayName: holidayName
-            });
-          } else {
-            weekInfo.days.push({
-              dateStr: dateStr, monthStr: monthStr, hours: dailyHours, isHoliday: false, holidayName: ""
-            });
-            weekInfo.hasNormalClass = true; 
-          }
+        if (holidayName) {
+          weekInfo.days.push({
+            dateStr: dateStr, monthStr: monthStr, isHoliday: true, holidayName: holidayName
+          });
+        } else {
+          weekInfo.days.push({
+            dateStr: dateStr, monthStr: monthStr, isHoliday: false, holidayName: ""
+          });
+          weekInfo.hasNormalClass = true; 
         }
       }
 
@@ -196,9 +191,12 @@ export default function AppPage() {
                }
             }
 
+            let maxHeaderRow = 0;
             for (let R = 0; R < grid.length; R++) {
-               let rowGrid = grid[R] || [];
-               let rowData = {};
+               let rowGrid = grid[R];
+               if (!rowGrid) continue;
+               
+               let rowDataArray = [];
                let isHeader = false;
                
                for (let C = 0; C <= maxC; C++) {
@@ -208,17 +206,18 @@ export default function AppPage() {
                   if (R <= headerEndRow) {
                      mockWorksheet[XLSX.utils.encode_cell({c: C, r: R})] = cellObj;
                      isHeader = true;
+                     if(R>maxHeaderRow) maxHeaderRow = R;
                   } else {
                      if (!cellObj.merged) {
-                       rowData[C] = cellObj;
+                       rowDataArray.push(cellObj);
                      }
                   }
                }
                
-               if (!isHeader && Object.keys(rowData).length > 0) {
+               if (!isHeader && rowDataArray.length > 0) {
                  let hasContent = false;
-                 for (let k in rowData) { if (rowData[k].v) hasContent = true; }
-                 if (hasContent) extractedRows.push(rowData);
+                 for (let cell of rowDataArray) { if (cell.v) hasContent = true; }
+                 if (hasContent) extractedRows.push(rowDataArray);
                }
             }
 
@@ -494,7 +493,7 @@ export default function AppPage() {
             dateText = `${firstDay.dateStr.split('.')[0]} ${firstDay.monthStr} - ${lastDay.dateStr.split('.')[0]} ${lastDay.monthStr}`;
         }
 
-        let weekHours = week.days.filter(d => !d.isHoliday).reduce((sum, d) => sum + d.hours, 0);
+        let weekHours = weeklyHours || "";
         
         if (!week.hasNormalClass) {
           const hNames = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))].join(" / ");
@@ -629,28 +628,19 @@ export default function AppPage() {
                 </div>
               </div>
               
-              <div className="p-6 grid grid-cols-2 md:grid-cols-5 gap-4">
-                {[
-                  { id: 1, name: "Pazartesi" }, { id: 2, name: "Salı" }, 
-                  { id: 3, name: "Çarşamba" }, { id: 4, name: "Perşembe" }, { id: 5, name: "Cuma" }
-                ].map(day => (
-                  <div key={day.id} className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">{day.name}</label>
-                    <input 
-                      type="number" 
-                      min="0" max="10"
-                      value={schedule[day.id]}
-                      onChange={(e) => handleScheduleChange(day.id, e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow bg-white text-center text-lg font-semibold"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 text-sm text-slate-600 flex items-center justify-between">
-                <span>Haftalık Toplam Ders Saati:</span>
-                <span className="font-bold text-indigo-700 text-lg">
-                  {Object.values(schedule).reduce((a, b) => a + b, 0)} Saat
-                </span>
+              <div className="p-6">
+                <div className="max-w-md mx-auto space-y-3">
+                  <label className="block text-sm font-medium text-slate-700">Haftalık Toplam Ders Saati</label>
+                  <input 
+                    type="number" 
+                    min="1" max="40"
+                    value={weeklyHours}
+                    onChange={(e) => setWeeklyHours(e.target.value)}
+                    placeholder="Örn: 3"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-lg font-semibold shadow-sm"
+                  />
+                  <p className="text-xs text-slate-500">Bu dersin haftada toplam kaç saat işlendiğini girin.</p>
+                </div>
               </div>
             </div>
 

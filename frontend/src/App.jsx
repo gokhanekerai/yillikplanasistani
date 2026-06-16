@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
   const [planFile, setPlanFile] = useState(null);
-  const [calendarFile, setCalendarFile] = useState(null);
+  const [selectedYear, setSelectedYear] = useState('2026-2027');
   const [status, setStatus] = useState('idle'); // idle, uploading, processing, success, error
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -13,22 +13,14 @@ function App() {
     if (acceptedFiles?.length > 0) setPlanFile(acceptedFiles[0]);
   };
 
-  const onDropCalendar = (acceptedFiles) => {
-    if (acceptedFiles?.length > 0) setCalendarFile(acceptedFiles[0]);
-  };
-
   const { getRootProps: getPlanRootProps, getInputProps: getPlanInputProps, isDragActive: isPlanDrag } = useDropzone({
     onDrop: onDropPlan,
     accept: {
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls']
     },
-    maxFiles: 1
-  });
-
-  const { getRootProps: getCalendarRootProps, getInputProps: getCalendarInputProps, isDragActive: isCalendarDrag } = useDropzone({
-    onDrop: onDropCalendar,
-    accept: { 'application/pdf': ['.pdf'] },
     maxFiles: 1
   });
 
@@ -39,9 +31,7 @@ function App() {
     
     const formData = new FormData();
     formData.append('plan_file', planFile);
-    if (calendarFile) {
-        formData.append('calendar_file', calendarFile);
-    }
+    formData.append('academic_year', selectedYear);
 
     try {
         const response = await fetch('http://localhost:8000/api/process-plan', {
@@ -50,7 +40,8 @@ function App() {
         });
 
         if (!response.ok) {
-            throw new Error('Dosya işlenirken bir hata oluştu.');
+            const errorData = await response.json().catch(() => null);
+            throw new Error((errorData && errorData.detail) ? errorData.detail : 'Dosya işlenirken bir hata oluştu.');
         }
 
         const blob = await response.blob();
@@ -91,7 +82,7 @@ function App() {
             transition={{ delay: 0.1 }}
             className="mt-4 text-lg text-slate-600"
           >
-            Yıllık planınızı ve MEB takvimini yükleyin, tatil günleri otomatik olarak işaretlenip PDF olarak hazırlansın.
+            Yıllık planınızı yükleyin ve yılı seçin, tatil günleri otomatik olarak işaretlensin.
           </motion.p>
         </div>
 
@@ -106,7 +97,7 @@ function App() {
               <div 
                 {...getPlanRootProps()} 
                 className={`
-                  border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-200
+                  border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-200 h-64 flex flex-col justify-center
                   ${isPlanDrag ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-brand-400 hover:bg-slate-50'}
                   ${planFile ? 'border-green-500 bg-green-50' : ''}
                 `}
@@ -122,40 +113,33 @@ function App() {
                   <div className="flex flex-col items-center text-slate-500">
                     <Upload className="w-10 h-10 mb-3 text-slate-400" />
                     <span className="font-medium">Word veya Excel dosyası yükleyin</span>
-                    <span className="text-sm mt-1">.docx veya .xlsx</span>
+                    <span className="text-sm mt-1">.docx, .doc, .xlsx, .xls</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Calendar Upload */}
+            {/* Year Selection */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-slate-900 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-brand-500" />
-                2. MEB Çalışma Takvimi
+                2. Eğitim Öğretim Yılı
               </h3>
-              <div 
-                {...getCalendarRootProps()} 
-                className={`
-                  border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-200
-                  ${isCalendarDrag ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-brand-400 hover:bg-slate-50'}
-                  ${calendarFile ? 'border-green-500 bg-green-50' : ''}
-                `}
-              >
-                <input {...getCalendarInputProps()} />
-                {calendarFile ? (
-                  <div className="flex flex-col items-center text-green-700">
-                    <CheckCircle2 className="w-10 h-10 mb-3" />
-                    <span className="font-medium">{calendarFile.name}</span>
-                    <span className="text-sm opacity-75 mt-1">{(calendarFile.size / 1024 / 1024).toFixed(2)} MB</span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center text-slate-500">
-                    <Upload className="w-10 h-10 mb-3 text-slate-400" />
-                    <span className="font-medium">MEB Takvimi PDF'i yükleyin</span>
-                    <span className="text-sm mt-1">.pdf</span>
-                  </div>
-                )}
+              <div className="h-64 flex flex-col justify-center p-8 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                <label className="block text-sm font-medium text-slate-700 mb-3 text-center">
+                  Hangi yıla ait tatiller eklenecek?
+                </label>
+                <select 
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="mt-1 block w-full pl-3 pr-10 py-3 text-base border-slate-300 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm rounded-xl border bg-white shadow-sm"
+                >
+                  <option value="2026-2027">2026 - 2027 Eğitim Öğretim Yılı</option>
+                  <option value="2027-2028" disabled>2027 - 2028 (Yakında)</option>
+                </select>
+                <p className="mt-4 text-sm text-slate-500 text-center">
+                  MEB 2026-2027 çalışma takvimi resmi tatilleri veritabanında hazırdır.
+                </p>
               </div>
             </div>
           </div>
@@ -163,10 +147,10 @@ function App() {
           <div className="mt-10 flex justify-center">
             <button
               onClick={handleProcess}
-              disabled={!planFile || !calendarFile || status === 'processing'}
+              disabled={!planFile || status === 'processing'}
               className={`
                 flex items-center gap-2 px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300
-                ${(!planFile || !calendarFile) 
+                ${(!planFile) 
                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
                   : 'bg-brand-600 text-white hover:bg-brand-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1'}
               `}

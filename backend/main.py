@@ -1,9 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import os
 import shutil
 from processor import process_plan_file
+from converter import convert_xls_to_xlsx, convert_doc_to_docx
 
 app = FastAPI(title="Yıllık Plan Tatil İşaretleyici")
 
@@ -27,23 +28,25 @@ def read_root():
     return {"status": "Yıllık Plan API is running"}
 
 @app.post("/api/process-plan")
-async def process_plan(plan_file: UploadFile = File(...), calendar_file: UploadFile = File(None)):
-    if not plan_file.filename.endswith(('.docx', '.xlsx')):
-        raise HTTPException(status_code=400, detail="Sadece .docx ve .xlsx desteklenmektedir.")
+async def process_plan(plan_file: UploadFile = File(...), academic_year: str = Form("2026-2027")):
+    filename = plan_file.filename.lower()
+    
+    if not filename.endswith(('.docx', '.xlsx', '.doc', '.xls')):
+        raise HTTPException(status_code=400, detail="Sadece .docx, .doc, .xlsx, .xls desteklenmektedir.")
         
     plan_path = os.path.join(UPLOAD_DIR, plan_file.filename)
     
     with open(plan_path, "wb") as buffer:
         shutil.copyfileobj(plan_file.file, buffer)
         
-    calendar_path = None
-    if calendar_file:
-        calendar_path = os.path.join(UPLOAD_DIR, f"calendar_{calendar_file.filename}")
-        with open(calendar_path, "wb") as buffer:
-            shutil.copyfileobj(calendar_file.file, buffer)
+    # Eğer format eski ise dönüştür
+    if filename.endswith('.xls'):
+        plan_path = convert_xls_to_xlsx(plan_path)
+    elif filename.endswith('.doc'):
+        plan_path = convert_doc_to_docx(plan_path)
             
     # Dosyaları işle
-    output_path = process_plan_file(plan_path, calendar_path)
+    output_path = process_plan_file(plan_path, academic_year)
     
     return FileResponse(
         path=output_path, 

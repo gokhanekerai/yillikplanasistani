@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEB Yıllık Plan Motoru - Pro AI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Excel Stilleri ve Formatları İçin Gelişmiş Kütüphane (xlsx-js-style) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+    
+    <style>
+        /* iOS Dark Mode Renk Paleti ve Tipografi */
+        :root {
+            --bg-color: #000000;
+            --card-bg: #1c1c1e;
+            --card-border: #2c2c2e;
+            --text-primary: #ffffff;
+            --text-secondary: #ebebf5;
+            --text-muted: #8e8e93;
+            --accent-blue: #0a84ff;
+            --accent-green: #30d158;
+            --accent-red: #ff453a;
+            --accent-purple: #bf5af2;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        input[type="date"], input[type="number"], input[type="text"], input[type="password"] {
+            color-scheme: dark;
+            background-color: #2c2c2e;
+            color: #ffffff;
+            border: 1px solid #38383a;
+            border-radius: 8px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3);
+        }
+
+        .ios-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .ios-title {
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        /* Yükleme (Loading) Animasyonu */
+        .loader {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-left-color: var(--accent-purple);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: #48484a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #636366; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6 lg:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Üst Bilgi Başlığı -->
+        <header class="mb-8 text-center md:text-left md:flex md:justify-between md:items-center">
+            <div>
+                <h1 class="text-3xl md:text-4xl ios-title text-white">Yıllık Plan Motoru</h1>
+                <p class="text-[--text-muted] mt-1 text-sm font-medium">Yapay Zeka Destekli Otomatik Analiz Sürümü</p>
+            </div>
+            <div class="mt-4 md:mt-0 text-[--text-muted] text-xs">
+                Sistem Durumu: <span class="text-[--accent-purple] font-bold">Günlük Çizelge Modu Aktif</span>
+            </div>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- SOL PANEL: GÖRSEL/PDF VE TAKVİM İNCELEME -->
+            <div class="lg:col-span-5 flex flex-col space-y-6">
+                <div class="ios-card flex flex-col h-[650px] lg:h-[800px]">
+                    <div class="p-4 border-b border-[#2c2c2e] bg-[#1c1c1e] z-10 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <span class="bg-[--accent-purple] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">AI</span>
+                            Takvim Analizörü
+                        </h2>
+                        
+                        <div class="flex space-x-2">
+                            <button id="removeCalendarBtn" onclick="removeCalendar()" class="hidden cursor-pointer text-xs bg-[rgba(255,69,58,0.15)] hover:bg-[rgba(255,69,58,0.25)] text-[--accent-red] py-1.5 px-3 rounded-lg transition border border-[rgba(255,69,58,0.3)] font-semibold">
+                                Kaldır
+                            </button>
+                            <label for="calendarUpload" class="cursor-pointer text-xs bg-[--accent-purple] hover:bg-[#a03bc7] text-white py-1.5 px-3 rounded-lg transition font-semibold shadow-lg shadow-purple-500/30">
+                                Takvim (PDF/Resim) Ekle
+                            </label>
+                            <input type="file" id="calendarUpload" accept="image/png, image/jpeg, image/webp, application/pdf" class="hidden" onchange="previewAndAnalyzeCalendar(event)">
+                        </div>
+                    </div>
+                    
+                    <div id="calendarViewer" class="flex-grow bg-black flex items-center justify-center overflow-auto p-2 relative">
+                        <div id="calendarPlaceholder" class="text-center text-[--text-muted] p-6">
+                            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#1c1c1e] border border-[#2c2c2e] text-[--text-muted] mb-4 shadow-lg">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            </div>
+                            <p class="text-sm font-medium mb-1 text-white">Takvim Dosyası Yükleyin</p>
+                            <p class="text-xs text-[--text-muted] leading-relaxed mt-2">MEB çalışma takvimini PDF veya resim (JPG/PNG) olarak yüklediğinizde, Yapay Zeka belgeyi saniyeler içinde okuyacak ve tüm tarihleri sağdaki forma otomatik dolduracaktır.</p>
+                        </div>
+                    </div>
+
+                    <!-- API KEY GÜVENLİ GİRİŞ ALANI -->
+                    <div class="p-4 border-t border-[#2c2c2e] bg-[#1c1c1e] z-10">
+                        <label class="block text-[10px] font-medium text-[--text-muted] mb-1">Google Gemini API Anahtarı (Masaüstü Kullanımı İçin)</label>
+                        <div class="flex space-x-2">
+                            <input type="text" id="apiKeyInput" placeholder="AIza... ile başlayan anahtarınızı eksiksiz yapıştırın" class="w-full rounded p-1.5 text-xs text-gray-200 bg-black border-[#38383a] font-mono tracking-tight">
+                            <button onclick="saveApiKey()" class="bg-[--accent-purple] hover:bg-[#a03bc7] text-white text-xs px-3 py-1.5 rounded font-semibold transition shadow-lg">Kaydet</button>
+                        </div>
+                        <p class="text-[9px] text-[--text-muted] mt-1.5 leading-tight">Şifreniz yalnızca bu bilgisayarda gizli tutulur. Yanlış harf veya boşluk kopyalamamaya dikkat ediniz.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SAĞ PANEL: AYARLAR VE OLUŞTURMA -->
+            <div class="lg:col-span-7 space-y-6">
+                
+                <!-- Tarih Ayarları -->
+                <div class="ios-card p-5 md:p-6 relative">
+                    <div class="flex justify-between items-center mb-5 border-b border-[#2c2c2e] pb-3">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <span class="bg-[--accent-blue] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">1</span>
+                            Tarih Ayarları
+                        </h2>
+                        <span id="aiStatusBadge" class="text-[10px] bg-[#2c2c2e] text-gray-400 px-2 py-1 rounded font-semibold tracking-wide flex items-center gap-1">
+                            BELGE BEKLENİYOR
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-5">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-[--text-secondary] mb-1">Okulların Açılış Tarihi</label>
+                                <input type="date" id="schoolStartDate" class="w-full rounded-xl p-2.5 text-sm transition font-medium text-[--accent-blue]">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-[--text-secondary] mb-1">Okulların Kapanış Tarihi</label>
+                                <input type="date" id="schoolEndDate" class="w-full rounded-xl p-2.5 text-sm transition font-medium text-[--accent-blue]">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-[--text-muted] mb-1 uppercase tracking-wider">1. Ara Tatil</label>
+                                <div class="space-y-2">
+                                    <input type="date" id="ara1Start" class="w-full rounded-lg p-2 text-xs text-gray-300">
+                                    <input type="date" id="ara1End" class="w-full rounded-lg p-2 text-xs text-gray-300">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-[--text-muted] mb-1 uppercase tracking-wider">Sömestr Tatili</label>
+                                <div class="space-y-2">
+                                    <input type="date" id="somestrStart" class="w-full rounded-lg p-2 text-xs text-gray-300">
+                                    <input type="date" id="somestrEnd" class="w-full rounded-lg p-2 text-xs text-gray-300">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-[--text-muted] mb-1 uppercase tracking-wider">2. Ara Tatil</label>
+                                <div class="space-y-2">
+                                    <input type="date" id="ara2Start" class="w-full rounded-lg p-2 text-xs text-gray-300">
+                                    <input type="date" id="ara2End" class="w-full rounded-lg p-2 text-xs text-gray-300">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 border-t border-[#2c2c2e]">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-sm font-medium text-[--text-secondary]">Ekstra Tatiller (Bayramlar vb.)</h3>
+                                <button onclick="addHolidayRow()" class="text-xs bg-[#2c2c2e] hover:bg-[#3a3a3c] text-white py-1 px-3 rounded-full transition">
+                                    + Manuel Ekle
+                                </button>
+                            </div>
+                            <div id="holidaysContainer" class="space-y-2 max-h-[150px] overflow-y-auto pr-2">
+                                <!-- Bayramlar buraya eklenecek -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ders Programı ve Çıktı -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Ders Programı -->
+                    <div class="ios-card p-5">
+                        <h2 class="text-base font-semibold flex items-center mb-4 border-b border-[#2c2c2e] pb-2">
+                            <span class="bg-[--accent-blue] text-white w-5 h-5 rounded-full flex items-center justify-center text-xs mr-2">2</span>
+                            Haftalık Ders Saati
+                        </h2>
+                        
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center bg-[#2c2c2e] p-2 rounded-lg">
+                                <span class="text-sm font-medium text-gray-300">Pazartesi</span>
+                                <input type="number" id="hrs-1" min="0" max="15" value="0" class="w-16 text-center rounded bg-[#1c1c1e] p-1 text-sm border-none">
+                            </div>
+                            <div class="flex justify-between items-center bg-[#2c2c2e] p-2 rounded-lg">
+                                <span class="text-sm font-medium text-gray-300">Salı</span>
+                                <input type="number" id="hrs-2" min="0" max="15" value="0" class="w-16 text-center rounded bg-[#1c1c1e] p-1 text-sm border-none">
+                            </div>
+                            <div class="flex justify-between items-center bg-[#2c2c2e] p-2 rounded-lg">
+                                <span class="text-sm font-medium text-gray-300">Çarşamba</span>
+                                <input type="number" id="hrs-3" min="0" max="15" value="0" class="w-16 text-center rounded bg-[#1c1c1e] p-1 text-sm border-none">
+                            </div>
+                            <div class="flex justify-between items-center bg-[#2c2c2e] p-2 rounded-lg">
+                                <span class="text-sm font-medium text-gray-300">Perşembe</span>
+                                <input type="number" id="hrs-4" min="0" max="15" value="0" class="w-16 text-center rounded bg-[#1c1c1e] p-1 text-sm border-none">
+                            </div>
+                            <div class="flex justify-between items-center bg-[#2c2c2e] p-2 rounded-lg">
+                                <span class="text-sm font-medium text-gray-300">Cuma</span>
+                                <input type="number" id="hrs-5" min="0" max="15" value="0" class="w-16 text-center rounded bg-[#1c1c1e] p-1 text-sm border-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Planı Oluştur ve Opsiyonel Başlıklar -->
+                    <div class="ios-card p-5 flex flex-col">
+                        <h2 class="text-base font-semibold flex items-center mb-4 border-b border-[#2c2c2e] pb-2">
+                            <span class="bg-[--accent-blue] text-white w-5 h-5 rounded-full flex items-center justify-center text-xs mr-2">3</span>
+                            Planı Oluştur
+                        </h2>
+                        
+                        <div class="grid grid-cols-1 gap-3 mb-4">
+                            <!-- Opsiyonel Girişler -->
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] font-medium text-[--text-muted] mb-1">Okul Adı (Opsiyonel)</label>
+                                    <input type="text" id="okulAdi" placeholder="Eski plandan alınır..." class="w-full rounded p-1.5 text-xs text-gray-200">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-medium text-[--text-muted] mb-1">Ders Adı (Opsiyonel)</label>
+                                    <input type="text" id="dersAdi" placeholder="Eski plandan alınır..." class="w-full rounded p-1.5 text-xs text-gray-200">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-medium text-[--text-muted] mb-1">Öğretmen (Opsiyonel)</label>
+                                    <input type="text" id="ogretmenAdi" placeholder="Örn: Gökhan YILMAZ" class="w-full rounded p-1.5 text-xs text-[--accent-blue]">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-medium text-[--text-muted] mb-1">Okul Müdürü (Opsiyonel)</label>
+                                    <input type="text" id="mudurAdi" placeholder="Örn: Ahmet DEMİR" class="w-full rounded p-1.5 text-xs text-[--accent-blue]">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-auto">
+                            <label for="excelUpload" class="cursor-pointer bg-[--accent-blue] hover:bg-[#007aff] text-white font-semibold py-3 px-4 rounded-xl shadow-[0_4px_14px_0_rgba(10,132,255,0.39)] transition duration-200 w-full flex items-center justify-center text-sm">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                                Eski Planı Yükle & Üret
+                            </label>
+                            <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" class="hidden" onchange="processMasterPlan(event)">
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <div id="statusMessage" class="mt-3 text-center text-xs font-semibold p-3 rounded-lg hidden transition-all break-words"></div>
+
+            </div>
+        </main>
+        
+        <footer class="text-center text-[--text-muted] text-xs mt-8 pb-4 border-t border-[#2c2c2e] pt-4">
+            <p>Sayın Gökhan Öğretmen için profesyonel standartlarda geliştirilmiştir. Gizlilik odaklıdır.</p>
+        </footer>
+    </div>
+
+    <script>
+        const turkishMonths = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
+        
+        // Yardımcı fonksiyon: Girilen tarihi gece yarısına veya gün sonuna sabitler.
+        function parseInputDate(dateStr, isEnd = false) {
+            if (!dateStr) return null;
+            let parts = dateStr.split('-');
+            let d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            if (isEnd) {
+                d.setHours(23, 59, 59, 999);
+            } else {
+                d.setHours(0, 0, 0, 0);
+            }
+            return d;
+        }
+
+        // Sayfa açıldığında kaydedilmiş API Anahtarı varsa getir ve kutuya doldur
+        window.onload = () => {
+            const savedKey = localStorage.getItem('gokhanHocaApiKey');
+            if (savedKey) {
+                document.getElementById('apiKeyInput').value = savedKey;
+            }
+        };
+
+        // API Anahtarını Yerel Tarayıcıya (LocalStorage) Kaydetme Fonksiyonu
+        function saveApiKey() {
+            let keyInput = document.getElementById('apiKeyInput').value.trim();
+            
+            // Eğer tırnak işaretiyle kopyalanmışsa, tırnakları temizle
+            keyInput = keyInput.replace(/['"]/g, '');
+            document.getElementById('apiKeyInput').value = keyInput; 
+
+            if (keyInput) {
+                if (!keyInput.startsWith('AIza')) {
+                    showStatus('HATA: Geçersiz anahtar formatı! Google API anahtarları "AIza" ile başlar. Lütfen doğru kopyaladığınıza emin olun.', 'error');
+                    return;
+                }
+                
+                localStorage.setItem('gokhanHocaApiKey', keyInput);
+                showStatus('API Anahtarı başarıyla kaydedildi. Şimdi Takvim (PDF/Resim) Ekle butonuna basarak işleminize başlayabilirsiniz.', 'success');
+            } else {
+                localStorage.removeItem('gokhanHocaApiKey');
+                showStatus('API Anahtarı silindi.', 'info');
+            }
+        }
+
+        // --- YAPAY ZEKA (GEMINI API) GÖRSEL/PDF ANALİZİ ---
+        const CANVAS_API_KEY = ""; // SİSTEM TARAFINDAN OTOMATİK EKLENİR
+
+        // KOTA AŞIMLARINDA AKILLI BEKLEME (EXPONENTIAL BACKOFF) SİSTEMİ
+        async function fetchWithRetry(url, options, maxRetries = 3) {
+            // Hata alınırsa sırasıyla 4 saniye, 8 saniye ve 15 saniye bekleyip tekrar dener
+            const delays = [4000, 8000, 15000]; 
+            
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        let errorText = await response.text();
+                        try {
+                            const errJson = JSON.parse(errorText);
+                            if(errJson.error && errJson.error.message) {
+                                errorText = errJson.error.message;
+                            }
+                        } catch(e) { } 
+                        
+                        // 429 (Too Many Requests - Kota Aşıldı) hatası ise ve son deneme değilse sessizce bekle
+                        if (response.status === 429 && i < maxRetries - 1) {
+                            showStatus(`Google güvenlik kotası devreye girdi. Sistem ${delays[i]/1000} saniye bekleyip otomatik tekrar deneyecek...`, 'info');
+                        }
+                        
+                        throw new Error(`[${response.status}] ${errorText}`);
+                    }
+                    return await response.json();
+                } catch (err) {
+                    if (i === maxRetries - 1) throw err; // Son denemede de hata verirse ana koda fırlat
+                    await new Promise(resolve => setTimeout(resolve, delays[i])); // Belirlenen süre kadar kodu duraklat
+                }
+            }
+        }
+
+        async function analyzeCalendarWithAI(base64Data, mimeType) {
+            const badge = document.getElementById('aiStatusBadge');
+            
+            let savedKey = localStorage.getItem('gokhanHocaApiKey');
+            let activeKey = (savedKey && savedKey.trim().length > 10) ? savedKey.trim() : CANVAS_API_KEY;
+            
+            if(!activeKey && window.location.protocol === 'file:') {
+                 badge.innerHTML = `❌ API ANAHTARI EKSİK`;
+                 badge.className = "text-[10px] bg-[rgba(255,69,58,0.15)] text-[--accent-red] px-2 py-1 rounded font-semibold tracking-wide flex items-center gap-1 border border-[rgba(255,69,58,0.3)]";
+                 showStatus('Lütfen sol panelin altındaki alana Google Gemini API Anahtarınızı girip "Kaydet" butonuna basınız.', 'error');
+                 return;
+            }
+
+            badge.innerHTML = `<div class="loader mr-1"></div> Analiz Ediliyor...`;
+            badge.className = "text-[10px] bg-[rgba(191,90,242,0.15)] text-[--accent-purple] px-2 py-1 rounded font-semibold tracking-wide flex items-center gap-1 border border-[rgba(191,90,242,0.3)]";
+            
+            showStatus('Yapay Zeka hesabınızdaki modelleri tarıyor...', 'info');
+
+            let targetModel = "";
+            
+            if (activeKey === CANVAS_API_KEY && CANVAS_API_KEY.length > 0) {
+                 targetModel = "gemini-2.5-flash-preview-09-2025";
+            } else {
+                 try {
+                     const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${activeKey}`;
+                     const listResponse = await fetch(listUrl);
+                     
+                     if (!listResponse.ok) {
+                         const errText = await listResponse.text();
+                         throw new Error(errText);
+                     }
+                     
+                     const listData = await listResponse.json();
+                     
+                     const validModels = listData.models.filter(m => 
+                         m.supportedGenerationMethods && 
+                         m.supportedGenerationMethods.includes("generateContent") &&
+                         m.name.includes("gemini")
+                     );
+                     
+                     if (validModels.length === 0) {
+                         throw new Error("API anahtarınıza tanımlı geçerli bir model bulunamadı.");
+                     }
+
+                     let selected = validModels.find(m => m.name.includes("1.5-flash")) ||
+                                    validModels.find(m => m.name.includes("flash")) ||
+                                    validModels[0]; 
+                                    
+                     targetModel = selected.name.replace('models/', '');
+                     console.log("Otomatik Seçilen Aktif Model:", targetModel);
+                     showStatus(`Bağlantı Kuruldu (${targetModel}). Belge okunuyor, lütfen bekleyiniz...`, 'info');
+                     
+                 } catch (e) {
+                     console.error("Model listesi çekilirken hata:", e);
+                     if (e.message.includes('API_KEY_INVALID')) {
+                         showStatus('Hata: API anahtarınız geçersiz. Lütfen kontrol edin.', 'error');
+                         badge.innerHTML = `❌ ANALİZ BAŞARISIZ`;
+                         return;
+                     }
+                     targetModel = "gemini-1.5-flash";
+                 }
+            }
+
+            const base64ImageData = base64Data.split(',')[1];
+
+            const prompt = `Sen bir eğitim asistanısın. Ekteki dosya (görsel veya PDF formatında) bir MEB çalışma takvimi veya eğitim iş günleri belgesidir. Lütfen belgeyi detaylıca analiz et, tarihleri çıkar ve SADECE geçerli bir JSON nesnesi döndür. Markdown etiketleri (\`\`\`json) kullanma, saf JSON metni olsun.
+            Bulman gereken format tam olarak şudur:
+            {
+                "schoolStartDate": "YYYY-MM-DD",
+                "schoolEndDate": "YYYY-MM-DD",
+                "ara1Start": "YYYY-MM-DD",
+                "ara1End": "YYYY-MM-DD",
+                "somestrStart": "YYYY-MM-DD",
+                "somestrEnd": "YYYY-MM-DD",
+                "ara2Start": "YYYY-MM-DD",
+                "ara2End": "YYYY-MM-DD",
+                "holidays": [
+                    {"name": "Tatil İsmi", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}
+                ]
+            }
+            Eğer bir tatil için sadece bir gün varsa start ve end aynı olmalıdır. Belgede resmî tatiller veya özel bayram günleri belirtilmişse onları holidays dizisine ekle. Eğer belgede bulunmayan bilgiler varsa onları boş bırakabilirsin ("").`;
+
+            const payload = {
+                contents: [{
+                    role: "user",
+                    parts: [
+                        { text: prompt },
+                        { inlineData: { mimeType: mimeType, data: base64ImageData } }
+                    ]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json"
+                }
+            };
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${activeKey}`;
+
+            try {
+                // fetchWithRetry sayesinde hata alınırsa otomatik bekleme yapılacak
+                const result = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const textContent = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if(textContent) {
+                    const parsedData = JSON.parse(textContent);
+                    applyAIDataToForm(parsedData);
+                    
+                    badge.innerHTML = `✔ YAPAY ZEKA TARAFINDAN DOLDURULDU`;
+                    badge.className = "text-[10px] bg-[rgba(48,209,88,0.15)] text-[--accent-green] px-2 py-1 rounded font-semibold tracking-wide flex items-center gap-1 border border-[rgba(48,209,88,0.3)]";
+                    showStatus(`İşlem Başarılı! Veriler forma aktarıldı.`, 'success');
+                } else {
+                    throw new Error("Yapay zeka analiz sonucu boş döndü.");
+                }
+            } catch (error) {
+                console.error("Yapay Zeka İşlem Hatası:", error);
+                badge.innerHTML = `❌ ANALİZ BAŞARISIZ`;
+                badge.className = "text-[10px] bg-[rgba(255,69,58,0.15)] text-[--accent-red] px-2 py-1 rounded font-semibold tracking-wide flex items-center gap-1 border border-[rgba(255,69,58,0.3)]";
+                
+                let errorMsg = error.message;
+                
+                if (errorMsg.includes('API_KEY_INVALID')) {
+                    showStatus('Hata: API anahtarınız geçersiz. Lütfen anahtarı eksiksiz kopyaladığınızdan emin olun.', 'error');
+                } else if (errorMsg.includes('429')) {
+                    showStatus('DİKKAT: Google API saatlik kota sınırınızı aştınız. Lütfen 1-2 dakika hiçbir işlem yapmadan bekleyip takviminizi tekrar yükleyin.', 'error');
+                } else if (errorMsg.includes('503')) {
+                    showStatus('BİLGİ (503): Google yapay zeka sunucularında şu an küresel bir yoğunluk yaşanıyor. Lütfen birkaç dakika bekleyip tekrar deneyin.', 'info');
+                } else if (errorMsg.includes('413') || (errorMsg.includes('400') && errorMsg.toLowerCase().includes('large'))) {
+                    showStatus('Hata: Yüklediğiniz dosya çok büyük. Kotaları aşmamak için lütfen daha düşük boyutlu (maks. 2 MB) bir dosya veya ekran görüntüsü yükleyin.', 'error');
+                } else if (errorMsg.includes('400')) {
+                    showStatus(`Hata (400): Geçersiz İstek. Dosya formatı desteklenmiyor olabilir. Detay: ${errorMsg}`, 'error');
+                } else {
+                    showStatus(`Sistem Hatası: ${errorMsg}`, 'error');
+                }
+            }
+        }
+
+        function applyAIDataToForm(data) {
+            if(data.schoolStartDate) document.getElementById('schoolStartDate').value = data.schoolStartDate;
+            if(data.schoolEndDate) document.getElementById('schoolEndDate').value = data.schoolEndDate;
+            if(data.ara1Start) document.getElementById('ara1Start').value = data.ara1Start;
+            if(data.ara1End) document.getElementById('ara1End').value = data.ara1End;
+            if(data.somestrStart) document.getElementById('somestrStart').value = data.somestrStart;
+            if(data.somestrEnd) document.getElementById('somestrEnd').value = data.somestrEnd;
+            if(data.ara2Start) document.getElementById('ara2Start').value = data.ara2Start;
+            if(data.ara2End) document.getElementById('ara2End').value = data.ara2End;
+
+            if(data.holidays && Array.isArray(data.holidays)) {
+                const container = document.getElementById('holidaysContainer');
+                container.innerHTML = ""; 
+                data.holidays.forEach(h => {
+                    if(h.name) addHolidayRow(h.name, h.start || "", h.end || "");
+                });
+            }
+        }
+
+        // --- BELGE (PDF/RESİM) YÜKLEME VE GÖSTERİM ---
+        function previewAndAnalyzeCalendar(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const viewer = document.getElementById('calendarViewer');
+            const removeBtn = document.getElementById('removeCalendarBtn');
+            const fileType = file.type;
+
+            if (!fileType.startsWith('image/') && fileType !== 'application/pdf') {
+                showStatus('Yapay zeka analizi için lütfen PDF veya resim (JPG, PNG) formatında takvim yükleyiniz.', 'error');
+                return;
+            }
+
+            viewer.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full space-y-4">
+                    <div class="loader w-12 h-12 border-4 border-l-[--accent-purple]"></div>
+                    <p class="text-[--accent-purple] text-sm font-semibold animate-pulse">Belge işleniyor...</p>
+                </div>
+            `;
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const fileDataURL = e.target.result;
+                
+                if (fileType === 'application/pdf') {
+                    viewer.innerHTML = `
+                        <div class="w-full h-full flex flex-col">
+                            <embed src="${fileDataURL}#toolbar=0" type="application/pdf" class="w-full flex-grow rounded-lg border border-[#2c2c2e]" />
+                        </div>
+                    `;
+                } else {
+                    viewer.innerHTML = `<img src="${fileDataURL}" class="max-w-full max-h-full object-contain rounded-lg shadow-lg border border-[#2c2c2e]">`;
+                }
+                
+                removeBtn.classList.remove('hidden'); 
+                analyzeCalendarWithAI(fileDataURL, fileType);
+            };
+            
+            reader.onerror = function() {
+                viewer.innerHTML = '<p class="text-[--accent-red] text-sm">Dosya okunurken bir hata oluştu.</p>';
+                removeBtn.classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeCalendar() {
+            const viewer = document.getElementById('calendarViewer');
+            const removeBtn = document.getElementById('removeCalendarBtn');
+            const fileInput = document.getElementById('calendarUpload');
+            fileInput.value = '';
+            removeBtn.classList.add('hidden');
+            
+            const badge = document.getElementById('aiStatusBadge');
+            badge.innerHTML = `BELGE BEKLENİYOR`;
+            badge.className = "text-[10px] bg-[#2c2c2e] text-gray-400 px-2 py-1 rounded font-semibold tracking-wide flex items-center gap-1";
+
+            viewer.innerHTML = `
+                <div id="calendarPlaceholder" class="text-center text-[--text-muted] p-6">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#1c1c1e] border border-[#2c2c2e] text-[--text-muted] mb-4 shadow-lg">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </div>
+                    <p class="text-sm font-medium mb-1 text-white">Takvim Dosyası Yükleyin</p>
+                    <p class="text-xs text-[--text-muted] leading-relaxed mt-2">MEB çalışma takvimini PDF veya resim (JPG/PNG) olarak yüklediğinizde, Yapay Zeka belgeyi saniyeler içinde okuyacak ve tüm tarihleri sağdaki forma otomatik dolduracaktır.</p>
+                </div>
+            `;
+        }
+
+        function addHolidayRow(name = "", start = "", end = "") {
+            const container = document.getElementById('holidaysContainer');
+            const row = document.createElement('div');
+            row.className = "flex gap-2 items-center bg-[#2c2c2e] p-1.5 rounded-lg holiday-row";
+            row.innerHTML = `
+                <input type="text" placeholder="Tatil Adı" value="${name}" class="holiday-name w-[40%] rounded p-1.5 text-xs bg-[#1c1c1e] text-white border-none font-medium text-gray-300">
+                <input type="date" value="${start}" class="holiday-start w-[25%] rounded p-1.5 text-xs bg-[#1c1c1e] text-white border-none text-gray-300" title="Başlangıç">
+                <input type="date" value="${end}" class="holiday-end w-[25%] rounded p-1.5 text-xs bg-[#1c1c1e] text-white border-none text-gray-300" title="Bitiş">
+                <button onclick="this.parentElement.remove()" class="w-[10%] text-[--accent-red] hover:text-red-400 font-bold text-sm" title="Sil">X</button>
+            `;
+            container.appendChild(row);
+            
+            const startInput = row.querySelector('.holiday-start');
+            const endInput = row.querySelector('.holiday-end');
+            startInput.addEventListener('change', (e) => {
+                if(!endInput.value) endInput.value = e.target.value;
+            });
+        }
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('statusMessage');
+            if (type === 'error') {
+                el.className = `mt-3 text-center text-sm font-semibold p-3 rounded-lg bg-[rgba(255,69,58,0.15)] text-[--accent-red] block border border-[rgba(255,69,58,0.3)] shadow-lg`;
+            } else if (type === 'info') {
+                el.className = `mt-3 text-center text-sm font-semibold p-3 rounded-lg bg-[rgba(191,90,242,0.15)] text-[--accent-purple] block border border-[rgba(191,90,242,0.3)] shadow-lg`;
+            } else {
+                el.className = `mt-3 text-center text-sm font-semibold p-3 rounded-lg bg-[rgba(48,209,88,0.15)] text-[--accent-green] block border border-[rgba(48,209,88,0.3)] shadow-lg`;
+            }
+            el.textContent = msg;
+            
+            if(type !== 'info') {
+                setTimeout(() => { if(el.textContent === msg) el.classList.add('hidden'); }, 15000); 
+            }
+        }
+
+        // --- PLANLAMA VE HAFTA/GÜN HESAPLAMA ALGORİTMASI ---
+        function isDateHoliday(dateObj, holidaysList) {
+            const time = dateObj.getTime();
+            for (let h of holidaysList) {
+                if (time >= h.start && time <= h.end) {
+                    return h.name;
+                }
+            }
+            return null;
+        }
+
+        function generateSchoolCalendar(startDateObj, endDateObj, schedule, holidaysList) {
+            const weeks = [];
+            
+            let currentMonday = new Date(startDateObj);
+            currentMonday.setHours(12, 0, 0, 0); 
+            
+            const dayOfWeek = currentMonday.getDay();
+            const diff = currentMonday.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            currentMonday.setDate(diff);
+
+            const finalDate = endDateObj ? new Date(endDateObj) : new Date(currentMonday.getTime() + (40 * 7 * 24 * 60 * 60 * 1000));
+            
+            let weekNumber = 1;
+            
+            for (let i = 0; i < 55; i++) {
+                if (currentMonday > finalDate) break;
+
+                let weekInfo = {
+                    weekNumStr: `${weekNumber}.0`,
+                    days: [],
+                    hasNormalClass: false
+                };
+
+                for (let d = 1; d <= 5; d++) {
+                    const dailyHours = schedule[d];
+                    if (dailyHours > 0) {
+                        let checkDate = new Date(currentMonday);
+                        checkDate.setDate(currentMonday.getDate() + (d - 1));
+                        checkDate.setHours(12, 0, 0, 0);
+                        
+                        let dayStart = new Date(checkDate);
+                        dayStart.setHours(0, 0, 0, 0);
+
+                        if (dayStart < startDateObj) continue; 
+                        if (endDateObj && dayStart > endDateObj) continue;
+
+                        let holidayName = isDateHoliday(checkDate, holidaysList);
+                        let dateStr = String(checkDate.getDate()).padStart(2, '0') + "." +
+                                      String(checkDate.getMonth() + 1).padStart(2, '0') + "." +
+                                      checkDate.getFullYear();
+                        let monthStr = turkishMonths[checkDate.getMonth()];
+
+                        if (holidayName) {
+                            weekInfo.days.push({
+                                dateStr: dateStr,
+                                monthStr: monthStr,
+                                hours: dailyHours, 
+                                isHoliday: true,
+                                holidayName: holidayName
+                            });
+                        } else {
+                            weekInfo.days.push({
+                                dateStr: dateStr,
+                                monthStr: monthStr,
+                                hours: dailyHours,
+                                isHoliday: false,
+                                holidayName: ""
+                            });
+                            weekInfo.hasNormalClass = true; 
+                        }
+                    }
+                }
+
+                if (weekInfo.days.length > 0) {
+                    weeks.push(weekInfo);
+                    weekNumber++;
+                }
+
+                currentMonday.setDate(currentMonday.getDate() + 7);
+            }
+
+            return weeks;
+        }
+
+        // --- EXCEL OKUMA, YENİ PLAN ÜRETME VE STİLLENDİRME ---
+        async function processMasterPlan(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const schedule = {
+                1: parseInt(document.getElementById('hrs-1').value) || 0,
+                2: parseInt(document.getElementById('hrs-2').value) || 0,
+                3: parseInt(document.getElementById('hrs-3').value) || 0,
+                4: parseInt(document.getElementById('hrs-4').value) || 0,
+                5: parseInt(document.getElementById('hrs-5').value) || 0
+            };
+
+            const totalWeeklyHours = Object.values(schedule).reduce((a, b) => a + b, 0);
+            if (totalWeeklyHours === 0) {
+                showStatus('Lütfen 2. Adımda haftalık ders saati giriniz.', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            const schoolStartDateInput = document.getElementById('schoolStartDate').value;
+            const schoolEndDateInput = document.getElementById('schoolEndDate').value;
+
+            if (!schoolStartDateInput) {
+                showStatus('Lütfen 1. Adımda Okulların Açılış Tarihini giriniz.', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            const schoolStartDateObj = parseInputDate(schoolStartDateInput);
+            const schoolEndDateObj = parseInputDate(schoolEndDateInput, true);
+
+            const startYear = schoolStartDateObj.getFullYear();
+            const endYear = schoolEndDateObj ? schoolEndDateObj.getFullYear() : startYear + 1;
+            const yearStr = `${startYear}-${endYear}`;
+
+            const holidaysList = [];
+            const addMebHoliday = (name, startId, endId) => {
+                const start = document.getElementById(startId).value;
+                const end = document.getElementById(endId).value;
+                if (start && end) {
+                    holidaysList.push({ 
+                        name: name, 
+                        start: parseInputDate(start).getTime(), 
+                        end: parseInputDate(end, true).getTime() 
+                    });
+                }
+            };
+
+            addMebHoliday("1. Dönem Ara Tatili", "ara1Start", "ara1End");
+            addMebHoliday("Yarıyıl Tatili (Sömestr)", "somestrStart", "somestrEnd");
+            addMebHoliday("2. Dönem Ara Tatili", "ara2Start", "ara2End");
+
+            document.querySelectorAll('.holiday-row').forEach(row => {
+                const name = row.querySelector('.holiday-name').value.trim();
+                const start = row.querySelector('.holiday-start').value;
+                const end = row.querySelector('.holiday-end').value;
+                if (name && start) {
+                    holidaysList.push({ 
+                        name: name, 
+                        start: parseInputDate(start).getTime(), 
+                        end: parseInputDate(end || start, true).getTime() 
+                    });
+                }
+            });
+
+            const okulAdi = document.getElementById('okulAdi').value.trim();
+            const dersAdi = document.getElementById('dersAdi').value.trim();
+            const ogretmenAdi = document.getElementById('ogretmenAdi').value.trim();
+            const mudurAdi = document.getElementById('mudurAdi').value.trim();
+
+            showStatus('Plan şekillendiriliyor, lütfen bekleyiniz...', 'info');
+
+            const schoolWeeks = generateSchoolCalendar(schoolStartDateObj, schoolEndDateObj, schedule, holidaysList);
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array', cellStyles: true});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const aoa = XLSX.utils.sheet_to_json(worksheet, {header: 1, defval: ""});
+                    
+                    if (aoa.length < 5) throw new Error("Dosya yapısı uygun değil (ilk 4 satır başlık olmalı).");
+
+                    // --- BAŞLIK GÜNCELLEMELER ---
+                    if (okulAdi) {
+                        aoa[0][0] = `${yearStr} EĞİTİM ÖĞRETİM YILI ${okulAdi.toUpperCase()}`;
+                        for(let c=1; c<aoa[0].length; c++) aoa[0][c] = ""; 
+                    } else {
+                        for (let c = 0; c < aoa[0].length; c++) {
+                            if (aoa[0][c]) aoa[0][c] = String(aoa[0][c]).replace(/(20\d{2})\s*[-/]\s*(20\d{2})/g, yearStr);
+                        }
+                    }
+
+                    if (dersAdi) {
+                        aoa[1][0] = `${dersAdi.toUpperCase()} ÜNİTELENDİRİLMİŞ YILLIK DERS PLANI`;
+                        for(let c=1; c<aoa[1].length; c++) aoa[1][c] = "";
+                    } else {
+                         for (let c = 0; c < aoa[1].length; c++) {
+                            if (aoa[1][c]) aoa[1][c] = String(aoa[1][c]).replace(/(20\d{2})\s*[-/]\s*(20\d{2})/g, yearStr);
+                        }
+                    }
+
+                    let headerRowIndex = -1;
+                    for(let i=0; i<10; i++) {
+                        if(aoa[i] && aoa[i].join("").toUpperCase().includes("KAZANIM")) {
+                            headerRowIndex = i;
+                            if(aoa[i+1]) {
+                                let nextRowStr = aoa[i+1].join("").toUpperCase();
+                                if(nextRowStr.includes("AY") || nextRowStr.includes("HAFTA") || nextRowStr.includes("SAAT")) {
+                                    headerRowIndex = i + 1;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    if (headerRowIndex === -1) headerRowIndex = 3;
+
+                    if(aoa[headerRowIndex]) {
+                        aoa[headerRowIndex][0] = "HAFTA";
+                        aoa[headerRowIndex][1] = "AY";
+                        aoa[headerRowIndex][2] = "TARİH";
+                        aoa[headerRowIndex][3] = "DERS SAATİ";
+                    }
+
+                    const finalData = [...aoa.slice(0, headerRowIndex + 1)];
+                    const oldContentRows = aoa.slice(headerRowIndex + 1);
+
+                    const pureContentRows = [];
+                    oldContentRows.forEach(row => {
+                        let kazanim = String(row[4] || "").trim();
+                        let konu = String(row[5] || "").trim();
+                        let combo = (kazanim + " " + konu).toUpperCase();
+                        
+                        if (combo === "") return;
+
+                        if (!combo.includes("TATİL") && !combo.includes("BAYRAM")) {
+                            pureContentRows.push(row);
+                        }
+                    });
+
+                    let contentIndex = 0;
+                    for (let week of schoolWeeks) {
+                        for (let day of week.days) {
+                            let newRow = new Array(aoa[headerRowIndex].length).fill(""); 
+                            
+                            newRow[0] = week.weekNumStr;
+                            newRow[1] = day.monthStr;
+                            newRow[2] = day.dateStr; 
+                            newRow[3] = day.hours.toString(); 
+
+                            if (day.isHoliday) {
+                                newRow[4] = ""; 
+                                newRow[5] = day.holidayName; 
+                            } else {
+                                if (contentIndex < pureContentRows.length) {
+                                    let sourceRow = pureContentRows[contentIndex];
+                                    for(let col = 4; col < sourceRow.length; col++) {
+                                        newRow[col] = sourceRow[col];
+                                    }
+                                } else {
+                                    newRow[5] = "Yıl Sonu Değerlendirmesi / Tekrar";
+                                }
+                            }
+                            finalData.push(newRow);
+                        }
+                        if (week.hasNormalClass) contentIndex++;
+                    }
+
+                    const tableEndRowIndex = finalData.length - 1;
+
+                    // --- İMZA BÖLÜMÜ ---
+                    finalData.push([]); 
+                    finalData.push([]); 
+                    
+                    let sigRowNames = new Array(aoa[headerRowIndex].length).fill("");
+                    let sigRowTitles = new Array(aoa[headerRowIndex].length).fill("");
+
+                    sigRowNames[4] = ogretmenAdi || ".......................";
+                    sigRowTitles[4] = "Ders Öğretmeni";
+
+                    sigRowNames[6] = mudurAdi || ".......................";
+                    sigRowTitles[6] = "Okul Müdürü";
+
+                    finalData.push(sigRowNames);
+                    finalData.push(sigRowTitles);
+
+                    // --- EXCEL DOSYASI OLUŞTURMA VE STİL ATAMALARI ---
+                    const newWorksheet = XLSX.utils.aoa_to_sheet(finalData);
+                    
+                    newWorksheet['!merges'] = [];
+                    if (worksheet['!merges']) {
+                        worksheet['!merges'].forEach(m => {
+                            if (m.s.r <= headerRowIndex) { 
+                                newWorksheet['!merges'].push(m);
+                            }
+                        });
+                    }
+
+                    newWorksheet['!cols'] = [
+                        {wch: 6}, {wch: 10}, {wch: 12}, {wch: 12}, 
+                        {wch: 40}, {wch: 40}, {wch: 25}, {wch: 30}, {wch: 30}
+                    ];
+
+                    const range = XLSX.utils.decode_range(newWorksheet['!ref']);
+                    for (let R = 0; R <= range.e.r; ++R) {
+                        for (let C = 0; C <= range.e.c; ++C) {
+                            let cell_address = { c: C, r: R };
+                            let cell_ref = XLSX.utils.encode_cell(cell_address);
+                            
+                            if (!newWorksheet[cell_ref] && R <= tableEndRowIndex) {
+                                newWorksheet[cell_ref] = { t: 's', v: '' };
+                            }
+
+                            let cell = newWorksheet[cell_ref];
+                            if (!cell) continue;
+
+                            let cellStyle = {
+                                font: { name: "Arial", sz: 10, color: { rgb: "000000" } },
+                                alignment: { vertical: "center", horizontal: "left", wrapText: true }
+                            };
+
+                            if (R <= tableEndRowIndex) {
+                                cellStyle.border = {
+                                    top: { style: "thin", color: { auto: 1 } },
+                                    bottom: { style: "thin", color: { auto: 1 } },
+                                    left: { style: "thin", color: { auto: 1 } },
+                                    right: { style: "thin", color: { auto: 1 } }
+                                };
+                            }
+
+                            if (R <= headerRowIndex) {
+                                cellStyle.font.bold = true;
+                                cellStyle.alignment.horizontal = "center";
+                            }
+
+                            if (R > headerRowIndex && R <= tableEndRowIndex) {
+                                if (C === 0 || C === 1 || C === 2 || C === 3) {
+                                    cellStyle.alignment.horizontal = "center";
+                                }
+                            }
+
+                            if (R > tableEndRowIndex) {
+                                cellStyle.font.bold = true;
+                                cellStyle.alignment.horizontal = "center";
+                            }
+
+                            cell.s = cellStyle;
+                        }
+                    }
+
+                    const newWorkbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, "Yillik_Plan");
+
+                    XLSX.writeFile(newWorkbook, `Yillik_Plan_${yearStr}.xlsx`);
+                    
+                    showStatus('İşlem Başarılı! Kenarlıklı günlük planınız Excel olarak indirildi.', 'success');
+
+                } catch (error) {
+                    console.error(error);
+                    showStatus('Hata: Yüklediğiniz dosya MEB şablonuna uymuyor. (' + error.message + ')', 'error');
+                }
+                event.target.value = ''; 
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
