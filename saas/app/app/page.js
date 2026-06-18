@@ -849,6 +849,39 @@ export default function AppPage() {
         }
       }
 
+      // Tablo kayması düzeltme algoritması
+      for (let rIdx = 0; rIdx < adjustedRows.length; rIdx++) {
+        const row = adjustedRows[rIdx];
+        
+        let yontemVal = row[6].v.trim();
+        let materyalVal = row[7].v.trim();
+        
+        // Eğer Materyaller sütununda yöntem/teknik anahtar kelimeleri geçiyorsa
+        const materyalUpper = materyalVal.toUpperCase();
+        const yontemKeywords = ["ANLATIM", "SORU-CEVAP", "SORU CEVAP", "GÖSTERİ", "GOSTERI", "UYGULAMA", "BEYİN FIRTINASI", "PROBLEM ÇÖZME", "YÖNTEM", "TEKNİK"];
+        
+        let isShifted = false;
+        for (let keyword of yontemKeywords) {
+          if (materyalUpper.includes(keyword)) {
+            isShifted = true;
+            break;
+          }
+        }
+        
+        if (isShifted) {
+          // Kaymayı düzelt: Materyal hücresindeki yöntemi Yöntem hücresine taşı
+          row[6].v = row[7].v;
+          
+          // Şimdi Materyal hücresi boşaldı.
+          // Bir üst satırdaki Materyal bilgisini buraya yazalım
+          if (rIdx > 0) {
+            row[7].v = adjustedRows[rIdx - 1][7].v;
+          } else {
+            row[7].v = "";
+          }
+        }
+      }
+
       // Herhangi bir satırın kazanımı veya konusu boşsa doldur
       for (let rIdx = 0; rIdx < adjustedRows.length; rIdx++) {
         const row = adjustedRows[rIdx];
