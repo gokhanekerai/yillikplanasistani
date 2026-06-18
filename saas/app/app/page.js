@@ -1100,11 +1100,12 @@ export default function AppPage() {
             let finalAçıklama = "";
             
             const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => {
-              let name = d.holidayName;
-              if (name === "Cumhuriyet Bayramı") return "29 Ekim Cumhuriyet Bayramı";
-              if (name === "Yılbaşı Tatili") return "1 Ocak Yılbaşı Tatili";
-              return name;
-            }))];
+              let name = d.holidayName.toLowerCase();
+              if (name.includes("cumhuriyet")) return "29 Ekim Cumhuriyet Bayramı";
+              if (name.includes("egemenlik") || name.includes("23 nisan")) return "23 Nisan Ulusal Egemenlik ve Çocuk Bayramı";
+              if (name.includes("gençlik") || name.includes("atatürk") || name.includes("19 mayıs")) return "19 Mayıs Atatürk'ü Anma, Gençlik ve Spor Bayramı";
+              return null;
+            }).filter(Boolean))];
 
             if (holidays.length > 0) {
               finalAçıklama = holidays.join(" / ");
