@@ -111,7 +111,16 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
            durationStr = "2 hafta";
         }
         
-        const prefix = TURKISH_MONTHS_SUFFIX[hStart.getMonth()] + " ";
+        let prefix = "";
+        if (holidayName.toLowerCase().includes("yarıyıl") || holidayName.toLowerCase().includes("sömestr")) {
+           prefix = ""; // Yarıyıl tatili için ay eki kullanma
+        } else if (hWorkDays < 4 && holidayName.toLowerCase().includes(TURKISH_MONTHS[hStart.getMonth()].toLowerCase())) {
+           // Zaten ay ismini içeren kısa tatillerde (ör: 29 Ekim) tekrar ay eki koyma
+           prefix = "";
+        } else {
+           prefix = TURKISH_MONTHS_SUFFIX[hStart.getMonth()] + " ";
+        }
+
         holidayDetails.push(`• ${durationStr} ${prefix}${holidayName}`);
       }
     }
