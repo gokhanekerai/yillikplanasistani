@@ -94,24 +94,37 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
       
       if (hWorkDays > 0) {
         let durationStr = `${hWorkDays} gün`;
-        if (hWorkDays >= 4 && hWorkDays <= 6) durationStr = "1 hafta";
-        else if (hWorkDays >= 9 && hWorkDays <= 11) durationStr = "2 hafta";
+        let prefix = "";
+        let holidayName = h.name;
+
+        // Resmi bayram isimlerini düzelt/tamamla
+        if (holidayName === "Cumhuriyet Bayramı" && hStart.getMonth() === 9) holidayName = "29 Ekim Cumhuriyet Bayramı";
+        if (holidayName === "Yılbaşı Tatili" && hStart.getMonth() === 0) holidayName = "1 Ocak Yılbaşı Tatili";
+
+        if (hWorkDays >= 4 && hWorkDays <= 6) {
+           durationStr = "1 hafta";
+           prefix = `${TURKISH_MONTHS[hStart.getMonth()]}'daki `;
+        }
+        else if (hWorkDays >= 9 && hWorkDays <= 11) {
+           durationStr = "2 hafta";
+           if (holidayName.toLowerCase().includes("yarıyıl") || holidayName.toLowerCase().includes("sömestr")) {
+               prefix = ""; // "2 hafta Yarıyıl Tatili" şeklinde daha doğal
+           } else {
+               prefix = `${TURKISH_MONTHS[hStart.getMonth()]}'daki `;
+           }
+        } else {
+           // Kısa tatiller için (ör: 1 gün 29 Ekim Cumhuriyet Bayramı)
+           prefix = "";
+        }
         
-        const monthName = TURKISH_MONTHS[hStart.getMonth()];
-        // "1 hafta Kasım'daki 1. Ara Tatil" formatı
-        holidayDetails.push(`• ${durationStr} ${monthName}'daki ${h.name}`);
+        holidayDetails.push(`• ${durationStr} ${prefix}${holidayName}`);
       }
     }
     
     const startStr = `${startDate.getDate()} ${TURKISH_MONTHS[startDate.getMonth()]} ${startDate.getFullYear()}`;
-    // Kesme işareti için basit bir ek kontrolü yapılabilir, ancak genel olarak 'da/'de uygun olur (ör: Eylül'de, Haziran'da vs. Çok detaya girmeden 'da/de/ta/te' yerine doğrudan ekli veya eksiz bırakabiliriz. Kullanıcı "14 Eylül 2026'da açılıp 25 Haziran 2027'de kapanıyor" istemiş.)
     const endStr = `${endDate.getDate()} ${TURKISH_MONTHS[endDate.getMonth()]} ${endDate.getFullYear()}`;
     
-    // Toplam hafta aralığı hesabı (matematiksel olarak gün farkı / 7)
-    const diffTime = Math.abs(endDate - startDate);
-    const totalSpanWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-
-    const headerMsg = `"${calendarData.year}" eğitim öğretim yılına ait toplam ${workDays} iş günü, ${holidayDays} tatil günü var (hafta içi) ve toplam ${totalWeeks} ders işlenecek hafta var.\n\nOkul ${startStr}'da açılıp ${endStr}'de kapanıyor. Bu aralık normalde ${totalSpanWeeks} hafta sürüyor.`;
+    const headerMsg = `"${calendarData.year}" eğitim öğretim yılına ait toplam ${workDays} iş günü, ${holidayDays} tatil günü var (hafta içi) ve toplam ${totalWeeks} ders işlenecek hafta var.\n\nOkul ${startStr}'da açılıp ${endStr}'de kapanıyor.`;
     
     const holidayListStr = holidayDetails.length > 0 ? `\n\nTatiller:\n${holidayDetails.join("\n")}` : "";
 
