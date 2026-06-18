@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Upload, Save, CheckCircle2, AlertCircle, Loader2, Code2 } from "lucide-react";
 import { saveCustomCalendar } from "../../../lib/holidays";
@@ -10,7 +10,18 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [parsedJson, setParsedJson] = useState("");
   const [rawText, setRawText] = useState("");
+  const [yearHint, setYearHint] = useState("[eğitim öğretim yılı]");
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const year = params.get("year");
+      if (year) {
+        setYearHint(year);
+      }
+    }
+  }, []);
 
   const processApiResponse = async (response) => {
     if (!response.ok) {
@@ -150,7 +161,7 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
               <textarea 
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
-                placeholder="meb.gov.tr adresindeki [eğitim öğretim yılı] EĞİTİM ÖĞRETİM YILI TAKVİMİ duyuru metnini (veya linkini) buraya yapıştırın."
+                placeholder={`meb.gov.tr adresindeki ${yearHint.replace(' Eğitim Öğretim Yılı', '')} EĞİTİM ÖĞRETİM YILI TAKVİMİ duyuru metnini (veya linkini) buraya yapıştırın.`}
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-sm shadow-sm resize-y"
                 rows="4"
               />

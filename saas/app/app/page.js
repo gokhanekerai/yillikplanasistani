@@ -1089,7 +1089,7 @@ export default function AppPage() {
                         ))}
                       </select>
                       <Link 
-                        href="/app/settings"
+                        href={`/app/settings?year=${selectedYear}`}
                         title="Yeni MEB Takvimi Yükle"
                         className="flex items-center justify-center px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 transition-colors shadow-sm"
                       >
