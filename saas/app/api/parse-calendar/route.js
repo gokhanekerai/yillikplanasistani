@@ -4,10 +4,10 @@ export const maxDuration = 60; // Vercel timeout'unu 60 saniyeye çıkar
 
 export async function POST(req) {
   try {
-    const { fileBase64, mimeType } = await req.json();
+    const { fileBase64, mimeType, rawText } = await req.json();
 
-    if (!fileBase64 || !mimeType) {
-      return new Response(JSON.stringify({ error: "Dosya bulunamadı." }), { status: 400 });
+    if (!rawText && (!fileBase64 || !mimeType)) {
+      return new Response(JSON.stringify({ error: "Dosya veya metin bulunamadı." }), { status: 400 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -28,15 +28,17 @@ DİKKAT: Öğretmenlerin mesleki çalışma dönemleri okulun açılış/kapanı
 Tarih formatı KESİNLİKLE "YYYY-MM-DD" (Yıl-Ay-Gün) formatında olmalıdır!
 `;
 
-    const content = [
-      {
+    const content = [prompt];
+    if (rawText) {
+      content.push(rawText);
+    } else {
+      content.push({
         inlineData: {
           data: fileBase64,
           mimeType: mimeType
         }
-      },
-      prompt
-    ];
+      });
+    }
 
     const modelsToTry = [
       "gemini-2.5-flash",

@@ -9,14 +9,63 @@ export default function SettingsPage() {
   const [status, setStatus] = useState("idle"); // idle, processing, success, error
   const [message, setMessage] = useState("");
   const [parsedJson, setParsedJson] = useState("");
+  const [rawText, setRawText] = useState("");
   const fileInputRef = useRef(null);
+
+  const processApiResponse = async (response) => {
+    if (!response.ok) {
+      const errData = await response.json().catch(() => null);
+      throw new Error(errData?.error || "Takvim işlenirken hata oluştu.");
+    }
+
+    const result = await response.json();
+    const calendarData = result.data;
+
+    // LocalStorage'a kaydet (Bu tarayıcı için hemen aktif olur)
+    saveCustomCalendar(calendarData.year, calendarData);
+
+    // Ekranda admin'e göstermek için JSON oluştur
+    const jsonOutput = `"${calendarData.year}": {
+  schoolStart: new Date("${calendarData.schoolStart}"),
+  schoolEnd: new Date("${calendarData.schoolEnd}"),
+  holidays: [
+${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.start}"), end: new Date("${h.end}") }`).join(",\n")}
+  ]
+}`;
+    setParsedJson(jsonOutput);
+    setStatus("success");
+    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve tarayıcınıza kaydedildi! Artık Yıllık Plan Üret sayfasında bu yılı seçebilirsiniz.`);
+  };
+
+  const handleTextSubmit = async () => {
+    if (!rawText || rawText.trim().length < 20) return;
+    
+    setStatus("processing");
+    setMessage("MEB Takvimi yapay zeka ile analiz ediliyor (Yaklaşık 5-10 saniye sürebilir)...");
+    setParsedJson("");
+
+    try {
+      const response = await fetch("/api/parse-calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText })
+      });
+      await processApiResponse(response);
+    } catch (err) {
+      console.error(err);
+      setStatus("error");
+      setMessage(err.message || "Bilinmeyen bir hata oluştu.");
+    } finally {
+      setRawText("");
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setStatus("processing");
-    setMessage("MEB Takvimi yapay zeka ile analiz ediliyor (Yaklaşık 10-20 saniye sürebilir)...");
+    setMessage("MEB Takvim dosyası yapay zeka ile analiz ediliyor (Yaklaşık 10-20 saniye sürebilir)...");
     setParsedJson("");
 
     try {
@@ -42,30 +91,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ fileBase64: base64Data, mimeType: mimeType })
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => null);
-        throw new Error(errData?.error || "Takvim işlenirken hata oluştu.");
-      }
-
-      const result = await response.json();
-      const calendarData = result.data;
-
-      // LocalStorage'a kaydet (Bu tarayıcı için hemen aktif olur)
-      saveCustomCalendar(calendarData.year, calendarData);
-
-      // Ekranda admin'e göstermek için JSON oluştur
-      // Admin bunu alıp lib/holidays.js içine yapıştırabilir.
-      const jsonOutput = `"${calendarData.year}": {
-  schoolStart: new Date("${calendarData.schoolStart}"),
-  schoolEnd: new Date("${calendarData.schoolEnd}"),
-  holidays: [
-${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.start}"), end: new Date("${h.end}") }`).join(",\n")}
-  ]
-}`;
-      setParsedJson(jsonOutput);
-      setStatus("success");
-      setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve tarayıcınıza kaydedildi! Artık Yıllık Plan Üret sayfasında bu yılı seçebilirsiniz.`);
-
+      await processApiResponse(response);
     } catch (err) {
       console.error(err);
       setStatus("error");
@@ -93,8 +119,8 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
         <h2 className="text-lg font-semibold text-slate-800 mb-4">Yeni MEB Akademik Takvimi Yükle</h2>
         <p className="text-slate-600 mb-6 text-sm">
-          Milli Eğitim Bakanlığı'nın yayınladığı <strong>PDF</strong> veya <strong>Resim (JPG/PNG)</strong> formatındaki akademik takvimi buraya yükleyebilirsiniz.
-          Yapay zeka (Gemini), dosyadaki açılış, kapanış ve ara tatil tarihlerini otomatik bulacak ve sistemi bu yıla göre güncelleyecektir.
+          Milli Eğitim Bakanlığı'nın duyurduğu takvimi isterseniz <strong>PDF / Resim</strong> olarak yükleyebilir, 
+          isterseniz resmi duyuru <strong>metnini kopyalayıp</strong> aşağıdaki kutuya yapıştırabilirsiniz.
         </p>
 
         {status === "error" && (
@@ -117,22 +143,56 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
             <p className="text-slate-600 font-medium">{message}</p>
           </div>
         ) : (
-          <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
-            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-              <Upload className="w-10 h-10 mb-3 text-slate-400" />
-              <p className="mb-2 text-sm text-slate-600">
-                <span className="font-semibold text-indigo-600">Dosya seçmek için tıklayın</span> veya sürükleyip bırakın
-              </p>
-              <p className="text-xs text-slate-500">PDF, PNG, JPG (Maks 5MB)</p>
+          <div className="space-y-8">
+            {/* Metin Yapıştırma */}
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-slate-700">1. Seçenek: Duyuru Metnini Yapıştırın</label>
+              <textarea 
+                value={rawText}
+                onChange={(e) => setRawText(e.target.value)}
+                placeholder="Millî Eğitim Bakanı Yusuf Tekin'in imzasıyla yayımlanan..."
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-sm shadow-sm resize-y"
+                rows="4"
+              />
+              <button 
+                onClick={handleTextSubmit}
+                disabled={!rawText || rawText.trim().length < 20}
+                className="w-full md:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl font-medium transition-colors"
+              >
+                Metni Analiz Et
+              </button>
             </div>
-            <input 
-              type="file" 
-              className="hidden" 
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={handleFileUpload}
-              ref={fileInputRef}
-            />
-          </label>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-slate-200"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-white px-3 text-sm text-slate-500 font-medium">veya</span>
+              </div>
+            </div>
+
+            {/* Dosya Yükleme */}
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-slate-700">2. Seçenek: Dosya Yükleyin (PDF/JPG/PNG)</label>
+              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <Upload className="w-10 h-10 mb-3 text-slate-400" />
+                  <p className="mb-2 text-sm text-slate-600">
+                    <span className="font-semibold text-indigo-600">Dosya seçmek için tıklayın</span> veya sürükleyip bırakın
+                  </p>
+                  <p className="text-xs text-slate-500">PDF, PNG, JPG (Maks 5MB)</p>
+                </div>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={handleFileUpload}
+                  ref={fileInputRef}
+                />
+              </label>
+            </div>
+          </div>
         )}
 
         {parsedJson && (
