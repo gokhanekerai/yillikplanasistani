@@ -81,6 +81,10 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
     const totalWeeks = activeWeeks.size;
 
     const TURKISH_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+    const TURKISH_MONTHS_SUFFIX = [
+      "Ocak'taki", "Şubat'taki", "Mart'taki", "Nisan'daki", "Mayıs'taki", "Haziran'daki",
+      "Temmuz'daki", "Ağustos'taki", "Eylül'deki", "Ekim'deki", "Kasım'daki", "Aralık'taki"
+    ];
     
     let holidayDetails = [];
     for (const h of calendarData.holidays) {
@@ -94,7 +98,6 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
       
       if (hWorkDays > 0) {
         let durationStr = `${hWorkDays} gün`;
-        let prefix = "";
         let holidayName = h.name;
 
         // Resmi bayram isimlerini düzelt/tamamla
@@ -103,20 +106,12 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
 
         if (hWorkDays >= 4 && hWorkDays <= 6) {
            durationStr = "1 hafta";
-           prefix = `${TURKISH_MONTHS[hStart.getMonth()]}'daki `;
         }
         else if (hWorkDays >= 9 && hWorkDays <= 11) {
            durationStr = "2 hafta";
-           if (holidayName.toLowerCase().includes("yarıyıl") || holidayName.toLowerCase().includes("sömestr")) {
-               prefix = ""; // "2 hafta Yarıyıl Tatili" şeklinde daha doğal
-           } else {
-               prefix = `${TURKISH_MONTHS[hStart.getMonth()]}'daki `;
-           }
-        } else {
-           // Kısa tatiller için (ör: 1 gün 29 Ekim Cumhuriyet Bayramı)
-           prefix = "";
         }
         
+        const prefix = TURKISH_MONTHS_SUFFIX[hStart.getMonth()] + " ";
         holidayDetails.push(`• ${durationStr} ${prefix}${holidayName}`);
       }
     }
