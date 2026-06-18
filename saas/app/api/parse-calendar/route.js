@@ -4,10 +4,30 @@ export const maxDuration = 60; // Vercel timeout'unu 60 saniyeye çıkar
 
 export async function POST(req) {
   try {
-    const { fileBase64, mimeType, rawText } = await req.json();
+    const { fileBase64, mimeType, rawText, url } = await req.json();
 
-    if (!rawText && (!fileBase64 || !mimeType)) {
-      return new Response(JSON.stringify({ error: "Dosya veya metin bulunamadı." }), { status: 400 });
+    let textToAnalyze = rawText;
+    let fetchUrl = url;
+
+    // Eğer kullanıcı metin kutusuna direkt link yapıştırdıysa
+    if (rawText && (rawText.trim().startsWith('http://') || rawText.trim().startsWith('https://'))) {
+      fetchUrl = rawText.trim();
+    }
+
+    if (fetchUrl) {
+      try {
+        const urlResponse = await fetch(fetchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+        if (!urlResponse.ok) throw new Error("URL'ye ulaşılamadı.");
+        const html = await urlResponse.text();
+        // Basitçe HTML etiketlerini temizle ve metne çevir
+        textToAnalyze = html.replace(/<[^>]*>?/gm, ' ').replace(/\s\s+/g, ' ');
+      } catch (e) {
+        return new Response(JSON.stringify({ error: "URL içeriği okunamadı: " + e.message }), { status: 400 });
+      }
+    }
+
+    if (!textToAnalyze && (!fileBase64 || !mimeType)) {
+      return new Response(JSON.stringify({ error: "Dosya, metin veya URL bulunamadı." }), { status: 400 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -31,8 +51,8 @@ DİKKAT EDİLECEK ÇOK ÖNEMLİ KURALLAR:
 `;
 
     const content = [prompt];
-    if (rawText) {
-      content.push(rawText);
+    if (textToAnalyze) {
+      content.push(textToAnalyze);
     } else {
       content.push({
         inlineData: {
