@@ -47,7 +47,13 @@ Aşağıda verilen resmi MEB Çalışma Takvimi belgesini incele ve aşağıdaki
 DİKKAT EDİLECEK ÇOK ÖNEMLİ KURALLAR:
 - Öğretmenlerin mesleki çalışma dönemleri okulun açılış/kapanış tarihleri DEĞİLDİR. Okul açılışı öğrencilerin derse başladığı tarihtir.
 - Tarih formatı KESİNLİKLE "YYYY-MM-DD" (Yıl-Ay-Gün) formatında olmalıdır!
-- Metinde veya dosyada geçmese dahi, bulduğun eğitim-öğretim yılına (schoolStart ile schoolEnd arasına) denk gelen Türkiye'nin TÜM resmi ve dini bayramlarını (29 Ekim Cumhuriyet Bayramı, 1 Ocak Yılbaşı, 23 Nisan, 1 Mayıs, 19 Mayıs, Ramazan Bayramı ve Kurban Bayramı) tatiller dizisine (holidays) KESİNLİKLE otomatik olarak eklemelisin. Kendin hesapla ve diziye dahil et. Bayram hafta sonuna denk geliyorsa bile sadece hafta içi günlerini tatil olarak ekleyebilirsin veya tümünü ekleyebilirsin. Önemli olan bayram günlerini atlamamandır.
+- Metinde veya dosyada geçmese dahi, bulduğun eğitim-öğretim yılına (schoolStart ile schoolEnd arasına) denk gelen Türkiye'nin TÜM resmi ve dini bayramlarını (29 Ekim Cumhuriyet Bayramı, 1 Ocak Yılbaşı, 23 Nisan, 1 Mayıs, 19 Mayıs, Ramazan Bayramı ve Kurban Bayramı) tatiller dizisine (holidays) KESİNLİKLE otomatik olarak eklemelisin.
+- Dini bayramların tarihleri her yıl değişir. Doğru analiz edebilmen için referans tarihler:
+  * 2027 Ramazan Bayramı: 9-11 Mart 2027
+  * 2027 Kurban Bayramı: 16-19 Mayıs 2027
+  * 2028 Ramazan Bayramı: 26-28 Şubat 2028
+  * 2028 Kurban Bayramı: 5-8 Mayıs 2028
+Lütfen bu tarihler ilgili eğitim yılına denk geliyorsa tatiller listesine kesinlikle ekle. Bayram hafta sonuna denk geliyorsa bile sadece hafta içi günlerini tatil olarak ekleyebilirsin veya tümünü ekleyebilirsin. Önemli olan bayram günlerini atlamamandır.
 `;
 
     const content = [prompt];
