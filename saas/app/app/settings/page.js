@@ -80,7 +80,30 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
 
     const totalWeeks = activeWeeks.size;
 
-    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve kaydedildi! Bu yıla ait toplam ${workDays} iş günü, ${holidayDays} tatil günü (hafta içi) ve toplam ${totalWeeks} işlenecek hafta bulundu.`);
+    const TURKISH_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+    let holidayDetails = [];
+    for (const h of calendarData.holidays) {
+      const hStart = new Date(h.start);
+      const hEnd = new Date(h.end);
+      
+      let hWorkDays = 0;
+      for (let d = new Date(hStart); d <= hEnd; d.setDate(d.getDate() + 1)) {
+         if (d.getDay() !== 0 && d.getDay() !== 6) hWorkDays++;
+      }
+      
+      if (hWorkDays > 0) {
+        let durationStr = `${hWorkDays} gün`;
+        if (hWorkDays >= 4 && hWorkDays <= 6) durationStr = "1 hafta";
+        else if (hWorkDays >= 9 && hWorkDays <= 11) durationStr = "2 hafta";
+        
+        const monthName = TURKISH_MONTHS[hStart.getMonth()];
+        holidayDetails.push(`• ${durationStr} (${monthName}) - ${h.name}`);
+      }
+    }
+    
+    const holidayListStr = holidayDetails.length > 0 ? `\n\nTatil Detayları:\n${holidayDetails.join("\n")}` : "";
+
+    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve kaydedildi! Bu yıla ait toplam ${workDays} iş günü, ${holidayDays} tatil günü (hafta içi) ve toplam ${totalWeeks} işlenecek hafta bulundu.${holidayListStr}`);
   };
 
   const handleTextSubmit = async () => {
@@ -179,7 +202,7 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
         {status === "success" && (
           <div className="mb-6 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100 flex items-start gap-3">
             <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5 text-emerald-600" />
-            <p className="text-sm font-medium">{message}</p>
+            <p className="text-sm font-medium whitespace-pre-wrap">{message}</p>
           </div>
         )}
 

@@ -76,8 +76,13 @@ export default function AppPage() {
         let dayStart = new Date(checkDate);
         dayStart.setHours(0, 0, 0, 0);
 
-        if (dayStart < mebCalendar.schoolStart) continue; 
-        if (dayStart > mebCalendar.schoolEnd) continue;
+        let sStart = new Date(mebCalendar.schoolStart);
+        sStart.setHours(0, 0, 0, 0);
+        let sEnd = new Date(mebCalendar.schoolEnd);
+        sEnd.setHours(23, 59, 59, 999);
+
+        if (dayStart < sStart) continue; 
+        if (dayStart > sEnd) continue;
 
         let holidayName = isDateHoliday(checkDate);
         let dateStr = String(checkDate.getDate()).padStart(2, '0') + "." +
