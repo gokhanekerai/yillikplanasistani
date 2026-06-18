@@ -24,8 +24,10 @@ Aşağıda verilen resmi MEB Çalışma Takvimi belgesini incele ve aşağıdaki
 3. "schoolEnd": İkinci dönemin bitiş tarihi (Yaz tatiline giriş). Tarih formatı YYYY-MM-DD olmalı.
 4. "holidays": Yıl içindeki ARA TATİL, YARIYIL TATİLİ (Sömestr) ve tüm resmi/dini bayram tatillerini içeren dizi.
 
-DİKKAT: Öğretmenlerin mesleki çalışma dönemleri okulun açılış/kapanış tarihleri DEĞİLDİR. Okul açılışı öğrencilerin derse başladığı tarihtir.
-Tarih formatı KESİNLİKLE "YYYY-MM-DD" (Yıl-Ay-Gün) formatında olmalıdır!
+DİKKAT EDİLECEK ÇOK ÖNEMLİ KURALLAR:
+- Öğretmenlerin mesleki çalışma dönemleri okulun açılış/kapanış tarihleri DEĞİLDİR. Okul açılışı öğrencilerin derse başladığı tarihtir.
+- Tarih formatı KESİNLİKLE "YYYY-MM-DD" (Yıl-Ay-Gün) formatında olmalıdır!
+- Metinde veya dosyada geçmese dahi, bulduğun eğitim-öğretim yılına (schoolStart ile schoolEnd arasına) denk gelen Türkiye'nin TÜM resmi ve dini bayramlarını (29 Ekim Cumhuriyet Bayramı, 1 Ocak Yılbaşı, 23 Nisan, 1 Mayıs, 19 Mayıs, Ramazan Bayramı ve Kurban Bayramı) tatiller dizisine (holidays) KESİNLİKLE otomatik olarak eklemelisin. Kendin hesapla ve diziye dahil et. Bayram hafta sonuna denk geliyorsa bile sadece hafta içi günlerini tatil olarak ekleyebilirsin veya tümünü ekleyebilirsin. Önemli olan bayram günlerini atlamamandır.
 `;
 
     const content = [prompt];
