@@ -1234,14 +1234,7 @@ export default function AppPage() {
   const handleDownload = () => {
     if (!previewData) return;
     try {
-      const excelBuffer = XLSX.write(previewData, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([excelBuffer], {type: "application/octet-stream"});
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${selectedYear.replace('-', '_')}_Plan.xlsx`;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      XLSX.writeFile(previewData, `${selectedYear.replace('-', '_')}_Plan.xlsx`);
       setStatus("success");
     } catch (err) {
       setErrorMessage("İndirme hatası: " + err.message);
