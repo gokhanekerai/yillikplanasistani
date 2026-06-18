@@ -38,14 +38,15 @@ export default function AppPage() {
     const checkDateOnly = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
     const checkTime = checkDateOnly.getTime();
     
+    let matches = [];
     for (let h of mebCalendar.holidays) {
       const sDate = new Date(h.start.getFullYear(), h.start.getMonth(), h.start.getDate());
       const eDate = new Date(h.end.getFullYear(), h.end.getMonth(), h.end.getDate());
       if (checkTime >= sDate.getTime() && checkTime <= eDate.getTime()) {
-        return h.name;
+        matches.push(h.name);
       }
     }
-    return null;
+    return matches.length > 0 ? matches.join(" / ") : null;
   };
 
   const generateSchoolCalendar = () => {
@@ -1053,7 +1054,7 @@ export default function AppPage() {
         let weekHours = weeklyHours || "";
         
         if (!week.hasNormalClass) {
-          const hNames = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))].join(" / ");
+          const hNames = [...new Set(week.days.filter(d => d.isHoliday).flatMap(d => d.holidayName.split(" / ")))].join(" / ");
           for (let c = 0; c <= maxCols; ++c) {
             let cellAddr = XLSX.utils.encode_cell({c: c, r: currentRowIdx});
             let style = { fill: { fgColor: { rgb: "FFFF6B6B" } }, font: { bold: true, color: { rgb: "FFFFFFFF" }, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: borderStyle };
