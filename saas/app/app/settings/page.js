@@ -146,11 +146,11 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
           <div className="space-y-8">
             {/* Metin Yapıştırma */}
             <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-700">1. Seçenek: Duyuru Metnini Veya Linkini Yapıştırın</label>
+              <label className="block text-sm font-medium text-slate-700">1. Seçenek: MEB Duyuru Metnini Yapıştırın</label>
               <textarea 
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
-                placeholder="MEB duyurusu metnini veya web sitesi linkini (http://...) buraya yapıştırın."
+                placeholder="meb.gov.tr adresindeki [eğitim öğretim yılı] EĞİTİM ÖĞRETİM YILI TAKVİMİ duyuru metnini (veya linkini) buraya yapıştırın."
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-sm shadow-sm resize-y"
                 rows="4"
               />
