@@ -902,7 +902,7 @@ export default function AppPage() {
           cellObj.s.alignment.wrapText = true;
           cellObj.s.alignment.vertical = "center";
 
-          if (c === 0) cellObj.v = (i + 1); // Sıra
+          if (c === 0) cellObj.v = activeWeekIndex; // Sıra
           if (c === 1) cellObj.v = lastDay.monthStr;
           if (c === 2) cellObj.v = dateText;
           if (c === 3) cellObj.v = weekHours;
