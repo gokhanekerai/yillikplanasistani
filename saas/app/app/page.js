@@ -1039,6 +1039,59 @@ export default function AppPage() {
         right: { style: "thin", color: { auto: 1 } }
       };
 
+      // Açıklama sütunu için bayram bilgilerini önceden hesapla
+      const aciklamaTexts = new Array(newWeeks.length).fill("");
+      for (let i = 0; i < newWeeks.length; i++) {
+        const week = newWeeks[i];
+        const nationalHolidaysInWeek = [];
+        
+        for (let day of week.days) {
+          if (day.isHoliday) {
+            let name = day.holidayName.toLowerCase();
+            let matchedName = null;
+            if (name.includes("cumhuriyet")) matchedName = "29 Ekim Cumhuriyet Bayramı";
+            else if (name.includes("egemenlik") || name.includes("23 nisan")) matchedName = "23 Nisan Ulusal Egemenlik ve Çocuk Bayramı";
+            else if (name.includes("gençlik") || name.includes("atatürk") || name.includes("19 mayıs")) matchedName = "19 Mayıs Atatürk'ü Anma, Gençlik ve Spor Bayramı";
+            
+            if (matchedName) {
+              const isOverlapping = day.holidayName.includes(" / ");
+              const isFullHolidayWeek = !week.hasNormalClass;
+              
+              if (isOverlapping || isFullHolidayWeek) {
+                // Çakışma veya tam tatil varsa bir önceki aktif haftaya yaz
+                let prevActiveIdx = i - 1;
+                while (prevActiveIdx >= 0 && !newWeeks[prevActiveIdx].hasNormalClass) {
+                  prevActiveIdx--;
+                }
+                if (prevActiveIdx >= 0) {
+                  if (!aciklamaTexts[prevActiveIdx].includes(matchedName)) {
+                    aciklamaTexts[prevActiveIdx] = aciklamaTexts[prevActiveIdx] 
+                      ? (aciklamaTexts[prevActiveIdx] + " / " + matchedName) 
+                      : matchedName;
+                  }
+                }
+              } else {
+                if (!nationalHolidaysInWeek.includes(matchedName)) {
+                  nationalHolidaysInWeek.push(matchedName);
+                }
+              }
+            }
+          }
+        }
+        
+        if (nationalHolidaysInWeek.length > 0) {
+          if (!aciklamaTexts[i]) {
+            aciklamaTexts[i] = nationalHolidaysInWeek.join(" / ");
+          } else {
+            for (let name of nationalHolidaysInWeek) {
+              if (!aciklamaTexts[i].includes(name)) {
+                aciklamaTexts[i] = aciklamaTexts[i] + " / " + name;
+              }
+            }
+          }
+        }
+      }
+
       for (let i = 0; i < newWeeks.length; i++) {
         const week = newWeeks[i];
         
@@ -1098,18 +1151,8 @@ export default function AppPage() {
           if (c === 3) cellObj.v = weekHours;
 
           if (c === 8) { // Açıklama sütunu
-            let finalAçıklama = "";
-            
-            const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => {
-              let name = d.holidayName.toLowerCase();
-              if (name.includes("cumhuriyet")) return "29 Ekim Cumhuriyet Bayramı";
-              if (name.includes("egemenlik") || name.includes("23 nisan")) return "23 Nisan Ulusal Egemenlik ve Çocuk Bayramı";
-              if (name.includes("gençlik") || name.includes("atatürk") || name.includes("19 mayıs")) return "19 Mayıs Atatürk'ü Anma, Gençlik ve Spor Bayramı";
-              return null;
-            }).filter(Boolean))];
-
-            if (holidays.length > 0) {
-              finalAçıklama = holidays.join(" / ");
+            let finalAçıklama = aciklamaTexts[i] || "";
+            if (finalAçıklama) {
               cellObj.s.fill = { fgColor: { rgb: "FFFFD93D" } };
               cellObj.s.font = { bold: true, color: { rgb: "FF333333" } };
             }
