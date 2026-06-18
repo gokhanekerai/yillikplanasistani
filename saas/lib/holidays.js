@@ -1,3 +1,4 @@
+// lib/holidays.js
 // Sabit MEB Akademik Takvimleri ve Resmi Tatiller Veritabanı
 
 export const HOLIDAY_DATA = {
@@ -33,6 +34,62 @@ export const HOLIDAY_DATA = {
   }
 };
 
+/**
+ * Custom Takvimleri localStorage'dan okur
+ */
+export function getCustomCalendars() {
+  if (typeof window === "undefined") return {};
+  try {
+    const data = localStorage.getItem("custom_calendars");
+    if (!data) return {};
+    const parsed = JSON.parse(data);
+    
+    // String tarihleri JS Date objesine çevir
+    const result = {};
+    for (const year in parsed) {
+      const cal = parsed[year];
+      result[year] = {
+        schoolStart: new Date(cal.schoolStart),
+        schoolEnd: new Date(cal.schoolEnd),
+        holidays: cal.holidays.map(h => ({
+          name: h.name,
+          start: new Date(h.start),
+          end: new Date(h.end)
+        }))
+      };
+    }
+    return result;
+  } catch (e) {
+    console.error("Custom calendar parse error:", e);
+    return {};
+  }
+}
+
+export function saveCustomCalendar(year, calendarData) {
+  if (typeof window === "undefined") return;
+  try {
+    const rawData = localStorage.getItem("custom_calendars");
+    const parsed = rawData ? JSON.parse(rawData) : {};
+    
+    parsed[year] = calendarData;
+    localStorage.setItem("custom_calendars", JSON.stringify(parsed));
+  } catch (e) {
+    console.error("Custom calendar save error:", e);
+  }
+}
+
+export function getAvailableYears() {
+  const baseYears = Object.keys(HOLIDAY_DATA);
+  const customYears = Object.keys(getCustomCalendars());
+  // Benzersiz tüm yılları birleştir
+  return [...new Set([...baseYears, ...customYears])].sort();
+}
+
 export function getCalendarForYear(year) {
+  const customCalendars = getCustomCalendars();
+  if (customCalendars[year]) {
+    return customCalendars[year];
+  }
   return HOLIDAY_DATA[year] || HOLIDAY_DATA["2026-2027"];
 }
+

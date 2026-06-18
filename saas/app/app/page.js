@@ -5,13 +5,14 @@ import Link from "next/link";
 import { ArrowLeft, Calendar, Upload, FileSpreadsheet, Download, Settings, ChevronRight, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 import * as mammoth from "mammoth";
-import { getCalendarForYear } from "../../lib/holidays";
+import { getCalendarForYear, getAvailableYears } from "../../lib/holidays";
 
 const TURKISH_MONTHS = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
 
 export default function AppPage() {
   const [weeklyHours, setWeeklyHours] = useState("");
-  const [selectedYear, setSelectedYear] = useState("2026-2027");
+  const [availableYears, setAvailableYears] = useState(getAvailableYears());
+  const [selectedYear, setSelectedYear] = useState(availableYears[0] || "2026-2027");
   const [planTitle, setPlanTitle] = useState("");
   const [teacherName, setTeacherName] = useState("");
   const [principalName, setPrincipalName] = useState("");
@@ -20,6 +21,14 @@ export default function AppPage() {
   const [processingStep, setProcessingStep] = useState("");
   const [previewData, setPreviewData] = useState(null);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    setAvailableYears(getAvailableYears());
+  }, []);
+
+  const handleYearChange = (year) => {
+    setSelectedYear(year);
+  };
 
   // Dinamik MEB Takvimi
   const mebCalendar = getCalendarForYear(selectedYear);
@@ -1069,14 +1078,24 @@ export default function AppPage() {
 
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-slate-700">Eğitim Öğretim Yılı</label>
-                    <select
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(e.target.value)}
-                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-base font-semibold shadow-sm"
-                    >
-                      <option value="2026-2027">2026 - 2027 Eğitim Öğretim Yılı</option>
-                      <option value="2027-2028">2027 - 2028 Eğitim Öğretim Yılı</option>
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedYear}
+                        onChange={(e) => handleYearChange(e.target.value)}
+                        className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-base font-semibold shadow-sm"
+                      >
+                        {availableYears.map(year => (
+                          <option key={year} value={year}>{year} Eğitim Öğretim Yılı</option>
+                        ))}
+                      </select>
+                      <Link 
+                        href="/app/settings"
+                        title="Yeni MEB Takvimi Yükle"
+                        className="flex items-center justify-center px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 transition-colors shadow-sm"
+                      >
+                        <Settings className="w-5 h-5 text-slate-600" />
+                      </Link>
+                    </div>
                     <p className="text-xs text-slate-400">Planın hazırlanacağı MEB akademik takvimini seçin.</p>
                   </div>
 
