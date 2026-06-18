@@ -46,11 +46,12 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
     setParsedJson(jsonOutput);
     setStatus("success");
 
-    // İş günü ve tatil günü hesaplama
+    // İş günü, tatil günü ve toplam hafta hesaplama
     const startDate = new Date(calendarData.schoolStart);
     const endDate = new Date(calendarData.schoolEnd);
     let workDays = 0;
     let holidayDays = 0;
+    const activeWeeks = new Set();
 
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       const dayOfWeek = d.getDay();
@@ -66,11 +67,20 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
         }
       }
 
-      if (isHoliday) holidayDays++;
-      else workDays++;
+      if (isHoliday) {
+        holidayDays++;
+      } else {
+        workDays++;
+        // Bu günün ait olduğu haftanın pazartesi gününü bularak haftaları grupla
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+        activeWeeks.add(monday.getTime());
+      }
     }
 
-    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve kaydedildi! Bu yıla ait toplam ${workDays} iş günü ve ${holidayDays} tatil günü (hafta içi günlerine denk gelen) bulundu.`);
+    const totalWeeks = activeWeeks.size;
+
+    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve kaydedildi! Bu yıla ait toplam ${workDays} iş günü, ${holidayDays} tatil günü (hafta içi) ve toplam ${totalWeeks} işlenecek hafta bulundu.`);
   };
 
   const handleTextSubmit = async () => {
