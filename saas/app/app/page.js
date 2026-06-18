@@ -731,6 +731,162 @@ export default function AppPage() {
       };
 
       const newWeeks = generateSchoolCalendar();
+      const activeWeeksCount = newWeeks.filter(w => w.hasNormalClass).length;
+      
+      // İmza ve footer içeren satırları temizle
+      let cleanedRows = contentRows.filter(row => {
+        if (!row) return false;
+        const getVal = (col) => {
+          let c = row[col];
+          if (c && typeof c === 'object' && 'v' in c) return String(c.v || "");
+          return String(c || "");
+        };
+        const kazanim = getVal(4).trim();
+        const konu = getVal(5).trim();
+        const yontem = getVal(6).trim();
+        const materyal = getVal(7).trim();
+        const aciklama = getVal(8).trim();
+        
+        if (!kazanim && !konu && !yontem && !materyal && !aciklama) return false;
+        
+        const allText = (kazanim + " " + konu + " " + yontem + " " + materyal + " " + aciklama).toUpperCase();
+        if (
+          allText.includes("UYGUNDUR") || 
+          allText.includes("MÜDÜR") || 
+          allText.includes("ÖĞRETMEN") || 
+          allText.includes("İMZA") || 
+          allText.includes("ZÜMRE") || 
+          allText.includes("2551") || 
+          allText.includes("OKUL MÜDÜRÜ")
+        ) {
+          if (kazanim.length < 5 && konu.length < 5) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      let adjustedRows = JSON.parse(JSON.stringify(cleanedRows));
+      
+      adjustedRows = adjustedRows.map(row => {
+        const newRow = {};
+        for (let col = 4; col <= 8; col++) {
+          let val = row[col];
+          if (val && typeof val === 'object' && 'v' in val) {
+            newRow[col] = { v: String(val.v || ""), t: val.t || 's', s: val.s };
+          } else {
+            newRow[col] = { v: String(val || ""), t: 's' };
+          }
+        }
+        return newRow;
+      });
+
+      const splitText = (text) => {
+        if (!text || text.length < 25) return null;
+        let parts = [];
+        if (text.includes("\n")) {
+          parts = text.split("\n");
+        } else if (text.includes(";")) {
+          parts = text.split(";");
+        } else if (text.includes(" ve ")) {
+          let idx = text.indexOf(" ve ");
+          parts = [text.substring(0, idx).trim(), text.substring(idx + 4).trim()];
+        } else if (text.includes(",")) {
+          let idx = text.lastIndexOf(",");
+          parts = [text.substring(0, idx).trim(), text.substring(idx + 1).trim()];
+        }
+        
+        if (parts.length >= 2 && parts[0].trim().length > 5 && parts[1].trim().length > 5) {
+          return [parts[0].trim(), parts.slice(1).join(" / ").trim()];
+        }
+        return null;
+      };
+
+      if (adjustedRows.length === 0) {
+        while (adjustedRows.length < activeWeeksCount) {
+          adjustedRows.push({
+            4: { v: "", t: 's' },
+            5: { v: "", t: 's' },
+            6: { v: "", t: 's' },
+            7: { v: "", t: 's' },
+            8: { v: "", t: 's' }
+          });
+        }
+      } else {
+        while (adjustedRows.length < activeWeeksCount) {
+          const lastIdx = adjustedRows.length - 1;
+          const lastRow = adjustedRows[lastIdx];
+          
+          const lastKazanim = lastRow[4].v;
+          const lastKonu = lastRow[5].v;
+          
+          const splitKonu = splitText(lastKonu);
+          const splitKazanim = splitText(lastKazanim);
+          
+          if (splitKonu || splitKazanim) {
+            const rowA = JSON.parse(JSON.stringify(lastRow));
+            const rowB = JSON.parse(JSON.stringify(lastRow));
+            
+            if (splitKazanim) {
+              rowA[4].v = splitKazanim[0];
+              rowB[4].v = splitKazanim[1];
+            }
+            if (splitKonu) {
+              rowA[5].v = splitKonu[0];
+              rowB[5].v = splitKonu[1];
+            }
+            
+            adjustedRows[lastIdx] = rowA;
+            adjustedRows.push(rowB);
+          } else {
+            const duplicateRow = JSON.parse(JSON.stringify(lastRow));
+            adjustedRows.push(duplicateRow);
+          }
+        }
+        
+        if (adjustedRows.length > activeWeeksCount) {
+          adjustedRows = adjustedRows.slice(0, activeWeeksCount);
+        }
+      }
+
+      // Herhangi bir satırın kazanımı veya konusu boşsa doldur
+      for (let rIdx = 0; rIdx < adjustedRows.length; rIdx++) {
+        const row = adjustedRows[rIdx];
+        if (!row[4].v.trim() || !row[5].v.trim()) {
+          if (rIdx > 0) {
+            const prevRow = adjustedRows[rIdx - 1];
+            const prevKazanim = prevRow[4].v;
+            const prevKonu = prevRow[5].v;
+            
+            const splitKonu = splitText(prevKonu);
+            const splitKazanim = splitText(prevKazanim);
+            
+            if (splitKonu || splitKazanim) {
+              if (splitKazanim) {
+                prevRow[4].v = splitKazanim[0];
+                row[4].v = splitKazanim[1];
+              } else {
+                row[4].v = prevKazanim;
+              }
+              
+              if (splitKonu) {
+                prevRow[5].v = splitKonu[0];
+                row[5].v = splitKonu[1];
+              } else {
+                row[5].v = prevKonu;
+              }
+            } else {
+              if (!row[4].v.trim()) row[4].v = prevKazanim;
+              if (!row[5].v.trim()) row[5].v = prevKonu;
+            }
+            
+            if (!row[6].v.trim()) row[6].v = prevRow[6].v;
+            if (!row[7].v.trim()) row[7].v = prevRow[7].v;
+            if (!row[8].v.trim()) row[8].v = prevRow[8].v;
+          }
+        }
+      }
+
       const newWs = {};
       newWs['!merges'] = [];
       
@@ -883,7 +1039,7 @@ export default function AppPage() {
 
         activeWeekIndex++;
 
-        let rowContent = contentRows[contentIdx];
+        let rowContent = adjustedRows[contentIdx];
         if (!rowContent) {
           rowContent = {};
         } else {
