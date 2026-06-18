@@ -45,7 +45,32 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
 }`;
     setParsedJson(jsonOutput);
     setStatus("success");
-    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve tarayıcınıza kaydedildi! Artık Yıllık Plan Üret sayfasında bu yılı seçebilirsiniz.`);
+
+    // İş günü ve tatil günü hesaplama
+    const startDate = new Date(calendarData.schoolStart);
+    const endDate = new Date(calendarData.schoolEnd);
+    let workDays = 0;
+    let holidayDays = 0;
+
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Haftasonu
+      
+      let isHoliday = false;
+      for (const h of calendarData.holidays) {
+        const hStart = new Date(h.start);
+        const hEnd = new Date(h.end);
+        if (d >= hStart && d <= hEnd) {
+          isHoliday = true;
+          break;
+        }
+      }
+
+      if (isHoliday) holidayDays++;
+      else workDays++;
+    }
+
+    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve kaydedildi! Bu yıla ait toplam ${workDays} iş günü ve ${holidayDays} tatil günü (hafta içi günlerine denk gelen) bulundu.`);
   };
 
   const handleTextSubmit = async () => {
