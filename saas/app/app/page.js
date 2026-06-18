@@ -1097,18 +1097,17 @@ export default function AppPage() {
           if (c === 3) cellObj.v = weekHours;
 
           if (c === 8) { // Açıklama sütunu
-            let originalAçıklama = cellObj.v || "";
-            let cleanedOriginal = cleanAçıklamaText(originalAçıklama);
-            let autoNotes = getBelirliGunVeYazili(week, activeWeekIndex);
+            let finalAçıklama = "";
             
-            let finalAçıklama = cleanedOriginal;
-            if (autoNotes) {
-              finalAçıklama = finalAçıklama ? (finalAçıklama + "\n" + autoNotes) : autoNotes;
-            }
-            
-            const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => d.holidayName))];
+            const holidays = [...new Set(week.days.filter(d => d.isHoliday).map(d => {
+              let name = d.holidayName;
+              if (name === "Cumhuriyet Bayramı") return "29 Ekim Cumhuriyet Bayramı";
+              if (name === "Yılbaşı Tatili") return "1 Ocak Yılbaşı Tatili";
+              return name;
+            }))];
+
             if (holidays.length > 0) {
-              finalAçıklama = finalAçıklama + (finalAçıklama ? "\n" : "") + "🎉 " + holidays.join(" / ");
+              finalAçıklama = holidays.join(" / ");
               cellObj.s.fill = { fgColor: { rgb: "FFFFD93D" } };
               cellObj.s.font = { bold: true, color: { rgb: "FF333333" } };
             }
