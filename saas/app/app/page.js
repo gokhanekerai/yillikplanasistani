@@ -5,11 +5,13 @@ import Link from "next/link";
 import { ArrowLeft, Calendar, Upload, FileSpreadsheet, Download, Settings, ChevronRight, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 import * as mammoth from "mammoth";
+import { getCalendarForYear } from "../../lib/holidays";
 
 const TURKISH_MONTHS = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
 
 export default function AppPage() {
   const [weeklyHours, setWeeklyHours] = useState("");
+  const [selectedYear, setSelectedYear] = useState("2026-2027");
   const [planTitle, setPlanTitle] = useState("");
   const [teacherName, setTeacherName] = useState("");
   const [principalName, setPrincipalName] = useState("");
@@ -19,22 +21,8 @@ export default function AppPage() {
   const [previewData, setPreviewData] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Sabit MEB 2026-2027 Takvimi
-  const mebCalendar = {
-    schoolStart: new Date(2026, 8, 14), // 14 Eylül 2026 (Aylar 0 indexli, 8=Eylül)
-    schoolEnd: new Date(2027, 5, 25),   // 25 Haziran 2027 (MEB Takvimine göre Cuma günü son)
-    holidays: [
-      { name: "1. Dönem Ara Tatili", start: new Date(2026, 10, 16), end: new Date(2026, 10, 20) }, // 16-20 Kasım 2026
-      { name: "Yarıyıl Tatili", start: new Date(2027, 0, 25), end: new Date(2027, 1, 5) }, // 25 Ocak - 5 Şubat 2027
-      { name: "2. Dönem Ara Tatili (Ramazan Bayramı dahil)", start: new Date(2027, 2, 8), end: new Date(2027, 2, 12) }, // 8-12 Mart 2027
-      { name: "Cumhuriyet Bayramı", start: new Date(2026, 9, 28), end: new Date(2026, 9, 29) },
-      { name: "Yılbaşı Tatili", start: new Date(2027, 0, 1), end: new Date(2027, 0, 1) },
-      { name: "23 Nisan Ulusal Egemenlik ve Çocuk Bayramı", start: new Date(2027, 3, 23), end: new Date(2027, 3, 23) },
-      { name: "1 Mayıs İşçi Bayramı", start: new Date(2027, 4, 1), end: new Date(2027, 4, 1) },
-      { name: "Kurban Bayramı Tatili", start: new Date(2027, 4, 15), end: new Date(2027, 4, 19) }, // 15-19 Mayıs 2027
-      { name: "19 Mayıs Atatürk'ü Anma, Gençlik ve Spor Bayramı", start: new Date(2027, 4, 19), end: new Date(2027, 4, 19) }
-    ]
-  };
+  // Dinamik MEB Takvimi
+  const mebCalendar = getCalendarForYear(selectedYear);
 
   const isDateHoliday = (dateObj) => {
     // Saat ve zaman dilimi farklarını sıfırlamak için sadece yıl-ay-gün üzerinden karşılaştırma yapıyoruz
@@ -154,10 +142,12 @@ export default function AppPage() {
 
     const fileName = file.name.toLowerCase();
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
-    const isWordOrPdf = fileName.endsWith('.docx') || fileName.endsWith('.pdf');
+    const isWord = fileName.endsWith('.docx') || fileName.endsWith('.doc');
+    const isPdf = fileName.endsWith('.pdf');
+    const isImage = fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg');
 
-    if (!isExcel && !isWordOrPdf) {
-      setErrorMessage("Lütfen sadece Excel (.xlsx, .xls), Word (.docx) veya PDF (.pdf) yükleyiniz.");
+    if (!isExcel && !isWord && !isPdf && !isImage) {
+      setErrorMessage("Lütfen sadece Excel (.xlsx, .xls), Word (.docx, .doc), PDF (.pdf) veya Görsel (.png, .jpg, .jpeg) yükleyiniz.");
       setStatus("error");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
@@ -175,7 +165,81 @@ export default function AppPage() {
     setProcessingStep("Dosya okunuyor...");
 
     try {
-      if (isWordOrPdf) {
+      // 1. PDF, GÖRSEL VE ESKİ WORD DOSYALARI (Base64 -> Gemini Multimodal OCR)
+      if (isPdf || isImage || (isWord && !fileName.endsWith('.docx'))) {
+        setProcessingStep(isPdf ? "PDF belgesi çözümleniyor..." : isImage ? "Görsel çözümleniyor..." : "Belge çözümleniyor...");
+        
+        const fileToBase64 = (file) => new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => {
+            const base64Str = reader.result.split(',')[1];
+            resolve(base64Str);
+          };
+          reader.onerror = error => reject(error);
+        });
+
+        const base64Data = await fileToBase64(file);
+        let mimeType = file.type;
+        if (!mimeType) {
+          if (isPdf) mimeType = "application/pdf";
+          else if (fileName.endsWith('.png')) mimeType = "image/png";
+          else mimeType = "image/jpeg";
+        }
+
+        setProcessingStep("Yapay zeka analizi başlatılıyor (Bu işlem dosya boyutuna göre 15-30 sn sürebilir)...");
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
+        let aiResponse;
+        try {
+          aiResponse = await fetch("/api/process", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileBase64: base64Data, mimeType: mimeType }),
+              signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+        } catch (fetchErr) {
+          clearTimeout(timeoutId);
+          if (fetchErr.name === 'AbortError') {
+            throw new Error("Yapay zeka yanıt verme süresi aşıldı (Zaman Aşımı).");
+          }
+          throw fetchErr;
+        }
+
+        setProcessingStep("Yapay zeka yanıtı işleniyor...");
+        if (!aiResponse.ok) {
+            const errData = await aiResponse.json().catch(() => null);
+            throw new Error(errData?.error || "Dosya işlenirken hata oluştu.");
+        }
+        
+        const aiData = await aiResponse.json();
+        if (!aiData.data || aiData.data.length === 0) {
+            throw new Error("Yapay zeka plandan veri çıkaramadı veya uygun tablo formatı bulamadı.");
+        }
+        
+        setProcessingStep("Excel şablonu oluşturuluyor...");
+        const parsedData = aiData.data;
+        const docTitle = planTitle.trim() || `${selectedYear} EĞİTİM ÖĞRETİM YILI YILLIK PLANI`;
+        
+        const extractedRows = parsedData.map(item => {
+           return {
+              4: { v: item.kazanimlar || "", t: 's' },
+              5: { v: item.konular || "", t: 's' },
+              6: { v: item.yontem || "", t: 's' },
+              7: { v: item.materyaller || "", t: 's' },
+              8: { v: item.aciklama || "", t: 's' }
+           };
+        });
+
+        generateExcelFromContent(extractedRows, true, null, null, null, docTitle);
+        return;
+      }
+
+      // 2. MODERN WORD DOSYALARI (.docx - Mammoth direct table parsing with fallback)
+      if (isWord && fileName.endsWith('.docx')) {
         try {
           const arrayBuffer = await file.arrayBuffer();
           let extractedRows = [];
@@ -327,7 +391,7 @@ export default function AppPage() {
 
                 if (extractedRows.length > 0) {
                   setProcessingStep("Excel şablonu oluşturuluyor...");
-                  const docTitle = "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+                  const docTitle = `${selectedYear} EĞİTİM ÖĞRETİM YILI YILLIK PLANI`;
                   generateExcelFromContent(extractedRows, true, null, null, null, docTitle);
                   return;
                 }
@@ -396,7 +460,7 @@ export default function AppPage() {
             
             setProcessingStep("Excel şablonu oluşturuluyor...");
             const parsedData = aiData.data;
-            const docTitle = "2026-2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+            const docTitle = `${selectedYear} EĞİTİM ÖĞRETİM YILI YILLIK PLANI`;
             
             extractedRows = parsedData.map(item => {
                return {
@@ -410,35 +474,6 @@ export default function AppPage() {
 
             generateExcelFromContent(extractedRows, true, null, null, null, docTitle);
             return;
-          } else if (fileName.endsWith('.pdf')) {
-            setProcessingStep("PDF belgesindeki metinler ayıklanıyor...");
-            // PDF.js ile PDF'ten metin çıkarma
-            const pdfjsLib = await import("pdfjs-dist/build/pdf");
-            pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
-            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-            const pdfDoc = await loadingTask.promise;
-            let fullText = "";
-            for (let i = 1; i <= pdfDoc.numPages; i++) {
-              const page = await pdfDoc.getPage(i);
-              const textContent = await page.getTextContent();
-              const pageText = textContent.items.map(item => item.str).join(" ");
-              fullText += pageText + "\n";
-            }
-            
-            setProcessingStep("PDF satırları işleniyor...");
-            // PDF metni çok karmaşıktır, satırlara bölüp 20 karakterden uzunları kazanım/konu gibi alıyoruz
-            const lines = fullText.split('\n').filter(line => line.trim().length > 20);
-            lines.forEach(line => {
-              // Yıllık plan olduğu için imza vs dışındaki cümleleri alalım
-              const str = line.toUpperCase();
-              if(!str.includes("UYGUNDUR") && !str.includes("MÜDÜR") && !str.includes("ÖĞRETMEN") && !str.includes("EĞİTİM ÖĞRETİM")) {
-                extractedRows.push({
-                  4: { v: line.substring(0, Math.floor(line.length/2)).trim(), t: 's' },
-                  5: { v: line.substring(Math.floor(line.length/2)).trim(), t: 's' }
-                });
-              }
-            });
           }
 
           if (extractedRows.length === 0) {
@@ -600,7 +635,7 @@ export default function AppPage() {
     try {
       const replaceYears = (text) => {
         if (typeof text !== 'string') return text;
-        return text.replace(/202[2345]\D{0,5}202[3456]/g, "2026-2027");
+        return text.replace(/202[234567]\D{0,5}202[345678]/g, selectedYear);
       };
 
 
@@ -705,7 +740,7 @@ export default function AppPage() {
         const headerStyle = { font: { bold: true, name: "Times New Roman", sz: 12 }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, fill: { fgColor: { rgb: "FFD9E1F2" } } };
         
         // Üst Başlık
-        let finalTitle = (planTitle && planTitle.trim()) || customTitle || "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+        let finalTitle = (planTitle && planTitle.trim()) || customTitle || `${selectedYear.replace('-', ' - ')} EĞİTİM ÖĞRETİM YILI YILLIK PLANI`;
         newWs['A1'] = { v: finalTitle, t: 's', s: { font: { bold: true, sz: 14, name: "Times New Roman" }, alignment: { horizontal: "center", vertical: "center", wrapText: true } } };
         newWs['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
         let newLinesCount = (finalTitle.match(/\n/g) || []).length;
@@ -727,7 +762,7 @@ export default function AppPage() {
             let oldCell = oldWorksheet[XLSX.utils.encode_cell({c: C, r: R})];
             if (oldCell) {
               let newV = replaceYears(oldCell.v);
-              if (typeof newV === 'string' && (newV.includes("2026-2027") || newV.toUpperCase().includes("EĞİTİM") || newV.toUpperCase().includes("ÖĞRETİM") || newV.toUpperCase().includes("YILI") || newV.toUpperCase().includes("PLAN"))) {
+              if (typeof newV === 'string' && (newV.includes(selectedYear) || newV.toUpperCase().includes("EĞİTİM") || newV.toUpperCase().includes("ÖĞRETİM") || newV.toUpperCase().includes("YILI") || newV.toUpperCase().includes("PLAN"))) {
                 if (titleRow === -1) {
                   titleRow = R;
                 }
@@ -783,7 +818,7 @@ export default function AppPage() {
           }
         } else {
           // Eğer başlık satırı bulunamadıysa en üste biz ekleyelim
-          let finalTitle = (planTitle && planTitle.trim()) || "2026 - 2027 EĞİTİM ÖĞRETİM YILI YILLIK PLANI";
+          let finalTitle = (planTitle && planTitle.trim()) || `${selectedYear.replace('-', ' - ')} EĞİTİM ÖĞRETİM YILI YILLIK PLANI`;
           newWs['A1'] = { v: finalTitle, t: 's', s: { font: { bold: true, sz: 14, name: "Times New Roman" }, alignment: { horizontal: "center", vertical: "center", wrapText: true } } };
           newWs['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } });
         }
@@ -957,7 +992,7 @@ export default function AppPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `2026_2027_Plan.xlsx`;
+      link.download = `${selectedYear.replace('-', '_')}_Plan.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
       setStatus("success");
@@ -1033,6 +1068,19 @@ export default function AppPage() {
                   </div>
 
                   <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Eğitim Öğretim Yılı</label>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-base font-semibold shadow-sm"
+                    >
+                      <option value="2026-2027">2026 - 2027 Eğitim Öğretim Yılı</option>
+                      <option value="2027-2028">2027 - 2028 Eğitim Öğretim Yılı</option>
+                    </select>
+                    <p className="text-xs text-slate-400">Planın hazırlanacağı MEB akademik takvimini seçin.</p>
+                  </div>
+
+                  <div className="space-y-2">
                     <label className="block text-sm font-medium text-slate-700">Plan Başlığı (İsteğe Bağlı)</label>
                     <input 
                       type="text" 
@@ -1078,12 +1126,12 @@ export default function AppPage() {
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs">2</span>
                     Eski Planı Yükle & Üret
                   </h2>
-                  <p className="text-sm text-slate-500 mt-1">Eski yıl planınızı seçtiğiniz an 2026-2027 planı üretilecektir. Excel, Word ve PDF desteklenir.</p>
+                  <p className="text-sm text-slate-500 mt-1">Eski yıl planınızı seçtiğiniz an {selectedYear} planı üretilecektir. Excel, Word ve PDF desteklenir.</p>
                 </div>
                 <div className="hidden sm:block">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-semibold ring-1 ring-inset ring-green-600/20">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                    2026-2027 MEB Takvimi Hazır
+                    {selectedYear} MEB Takvimi Hazır
                   </span>
                 </div>
               </div>
@@ -1100,7 +1148,7 @@ export default function AppPage() {
                     id="excelUpload" 
                     ref={fileInputRef}
                     type="file" 
-                    accept=".xlsx,.xls,.docx,.pdf" 
+                    accept=".xlsx,.xls,.docx,.doc,.pdf,.png,.jpg,.jpeg" 
                     className="hidden" 
                     onChange={processFile}
                     onClick={(e) => { e.target.value = null }}
@@ -1121,7 +1169,7 @@ export default function AppPage() {
                         <Upload className="w-6 h-6 text-slate-400 group-hover:text-indigo-600" />
                       </div>
                       <p className="text-base font-semibold mb-1">Eski planınızı seçmek için tıklayın</p>
-                      <p className="text-xs text-slate-400">.xlsx, .xls, .docx veya .pdf dosyaları</p>
+                      <p className="text-xs text-slate-400">.xlsx, .xls, .docx, .doc, .pdf veya görsel (.png, .jpg, .jpeg) dosyaları</p>
                     </div>
                   )}
                 </label>
