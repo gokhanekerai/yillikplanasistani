@@ -81,6 +81,7 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
     const totalWeeks = activeWeeks.size;
 
     const TURKISH_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+    
     let holidayDetails = [];
     for (const h of calendarData.holidays) {
       const hStart = new Date(h.start);
@@ -97,13 +98,24 @@ ${calendarData.holidays.map(h => `    { name: "${h.name}", start: new Date("${h.
         else if (hWorkDays >= 9 && hWorkDays <= 11) durationStr = "2 hafta";
         
         const monthName = TURKISH_MONTHS[hStart.getMonth()];
-        holidayDetails.push(`• ${durationStr} (${monthName}) - ${h.name}`);
+        // "1 hafta Kasım'daki 1. Ara Tatil" formatı
+        holidayDetails.push(`• ${durationStr} ${monthName}'daki ${h.name}`);
       }
     }
     
-    const holidayListStr = holidayDetails.length > 0 ? `\n\nTatil Detayları:\n${holidayDetails.join("\n")}` : "";
+    const startStr = `${startDate.getDate()} ${TURKISH_MONTHS[startDate.getMonth()]} ${startDate.getFullYear()}`;
+    // Kesme işareti için basit bir ek kontrolü yapılabilir, ancak genel olarak 'da/'de uygun olur (ör: Eylül'de, Haziran'da vs. Çok detaya girmeden 'da/de/ta/te' yerine doğrudan ekli veya eksiz bırakabiliriz. Kullanıcı "14 Eylül 2026'da açılıp 25 Haziran 2027'de kapanıyor" istemiş.)
+    const endStr = `${endDate.getDate()} ${TURKISH_MONTHS[endDate.getMonth()]} ${endDate.getFullYear()}`;
+    
+    // Toplam hafta aralığı hesabı (matematiksel olarak gün farkı / 7)
+    const diffTime = Math.abs(endDate - startDate);
+    const totalSpanWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
 
-    setMessage(`"${calendarData.year}" MEB Takvimi başarıyla çözümlendi ve kaydedildi! Bu yıla ait toplam ${workDays} iş günü, ${holidayDays} tatil günü (hafta içi) ve toplam ${totalWeeks} işlenecek hafta bulundu.${holidayListStr}`);
+    const headerMsg = `"${calendarData.year}" eğitim öğretim yılına ait toplam ${workDays} iş günü, ${holidayDays} tatil günü var (hafta içi) ve toplam ${totalWeeks} ders işlenecek hafta var.\n\nOkul ${startStr}'da açılıp ${endStr}'de kapanıyor. Bu aralık normalde ${totalSpanWeeks} hafta sürüyor.`;
+    
+    const holidayListStr = holidayDetails.length > 0 ? `\n\nTatiller:\n${holidayDetails.join("\n")}` : "";
+
+    setMessage(headerMsg + holidayListStr);
   };
 
   const handleTextSubmit = async () => {
